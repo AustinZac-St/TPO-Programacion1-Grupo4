@@ -1,0 +1,10 @@
+# Archivos que genera Python al ejecutar
+__pycache__/
+*.pyc
+
+# Archivos que genera pytest
+.pytest_cache/
+
+# Configuración de los editores
+.vscode/
+.idea/
