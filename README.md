@@ -6,7 +6,7 @@ Trabajo Práctico Integrador de Programación 1 / Algoritmo y Estructura de Dato
 ## Integrantes
 
 - Austin Zacarias Stelli- 1231965
-- Bizancio Geronimo - 1244258
+- Bisanzio Geronimo - 1244258
 - Juan Ignacio Chedufau Moleon - 1242733
 - Rafael Lepage - 1181469
 ## Requisitos
