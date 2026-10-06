@@ -1,12 +1,12 @@
 # Bitácora
 
-## Entrega 1 (28/09)
+## Entrega 1 (05/10)
 
 | Módulo       | Integrante(s)                |
 | ------------ | ---------------------------- |
-| tablero.py   | Nombre Apellido              |
-| flota.py     | Nombre Apellido              |
-| radar.py     | Nombre Apellido              |
-| armamento.py | Nombre Apellido              |
-| registro.py  | Nombre Apellido              |
-| partida.py   | Nombre Apellido (integrador) |
+| tablero.py   | Austin Zacarias Stelli           |
+| flota.py     | Rafael Lepage              |
+| radar.py     | Juan Ignacio Chedufau Moleon y Rafael Lepage         |
+| armamento.py | Juan Ignacio Chedufau Moleon             |
+| registro.py  | Bisanzio Geronimo           |
+| partida.py   | Rafael Lepage |
