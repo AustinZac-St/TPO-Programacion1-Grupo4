@@ -25,6 +25,7 @@ la opción tipeada con una función, sin cadenas de if / elif.
 
 import re
 
+import armamento
 import flota
 import registro
 import tablero
@@ -120,6 +121,34 @@ def lineas_del_cubo(cubo, capas, mostrar_naves):
         lineas.append("")
     lineas.append(REFERENCIAS)
     return lineas
+
+
+def aplicar_disparo(cubo, naves, letra_arma, punto):
+    """
+    Aplica un disparo sobre el cubo del rival: el arma dice qué celdas
+    toca y cada celda se marca como impacto o como agua. Las celdas ya
+    disparadas no cambian. Modifica el cubo y los impactos de las naves.
+    Recibe: el cubo y la flota (lista de naves) del rival, la letra del
+    arma y el punto apuntado (z, x, y).
+    Devuelve: la cantidad de celdas con nave alcanzadas (int).
+    Lanza: KeyError si la letra no está en el catálogo de armas.
+    """
+    funcion = armamento.catalogo_armas[letra_arma]["funcion"]
+    celdas = funcion(cubo, punto)
+
+    impactos = 0
+    for (z, x, y) in celdas:
+        estado = tablero.leer_celda(cubo, z, x, y)
+        if estado == tablero.NAVE_OCULTA:
+            tablero.escribir_celda(cubo, z, x, y, tablero.IMPACTO)
+            for nave in naves:
+                if (z, x, y) in nave["celdas"]:
+                    nave["impactos"].add((z, x, y))
+            impactos += 1
+        elif estado == tablero.SIN_EXPLORAR:
+            tablero.escribir_celda(cubo, z, x, y, tablero.AGUA_MARCADA)
+
+    return impactos
 
 
 # --------------------------------------------------------------------------
