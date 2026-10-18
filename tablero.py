@@ -1,5 +1,5 @@
 """
-tablero.py - Módulo del cubo (Entrega 1).
+tablero.py - Módulo del cubo (Entrega 1 y 2).
 
 Responsabilidad: crear el cubo, validar puntos, leer y escribir celdas,
 operaciones de matrices y dibujo de una capa de z.
@@ -129,6 +129,40 @@ def obtener_capa_z(cubo, z):
     return capa
 
 
+def obtener_plano_x(cubo,x):
+    """
+    Operacion de matrices: arma una  matriz del plano x ordenada para
+    dibujar, donde cada fila es un valor de z y cada columna un valor de y.
+    Recibe: el cubo y x (de 1 a N).
+    Devuelve: matriz de n x n con plano[z][y]
+
+    """
+    n = len(cubo)
+    plano = []
+    for z in range(n):
+        fila = []
+        for y in range(n):
+            fila.append(cubo[z][x-1][y])
+        plano.append(fila)
+    return plano
+
+
+def obtener_plano_y(cubo,y):
+    """
+    Operacion de matrices: arma una  matriz del plano y ordenada para
+    dibujar, donde cada fila es un valor de z y cada columna un valor de x.
+    Recibe: el cubo y y (de 1 a N).
+    Devuelve: matriz de n x n con plano[z][x]
+    """
+    n = len(cubo)
+    plano = []
+    for z in range(n):
+        fila = []
+        for x in range(n):
+            fila.append(cubo[z][x][y-1])
+        plano.append(fila)
+    return plano
+
 def contar_celdas_en_estado(cubo, estado):
     """
     Operación de matrices: cuenta cuántas celdas del cubo tienen un estado.
@@ -210,4 +244,60 @@ def dibujar_capa_z(cubo, z, mostrar_naves):
         etiqueta = completar_ancho("y" + str(y + 1), ancho)
         lineas.append(etiqueta + " " + " ".join(simbolos))
 
+    return lineas
+
+
+def dibujar_plano_x(cubo, x, mostrar_naves):
+    """
+    Arma el dibujo de un plano de x con encabezados de y y de z.
+    No imprime nada: devuelve las líneas para que las imprima partida.py.
+    Recibe: el cubo, x (de 1 a N) y mostrar_naves (bool).
+    Devuelve: lista de líneas (str).
+     """
+    n = len(cubo)
+    ancho = len("y" + str(n))
+    lineas = []
+
+    lineas.append("========= PLANO x = " + str(x) + " =========")
+    encabezado = []
+    for y in range(1, n + 1):
+        encabezado.append(completar_ancho("y" + str(y), ancho))
+    lineas.append(completar_ancho("", ancho) + " " + " ".join(encabezado))
+
+    plano = obtener_plano_x(cubo, x)
+    for z in range(n):
+        simbolos = []
+        for y in range(n):
+            simbolo = simbolo_de_estado(plano[z][y], mostrar_naves)
+            simbolos.append(completar_ancho(simbolo, ancho))
+        etiqueta = completar_ancho("z" + str(z + 1), ancho)
+        lineas.append(etiqueta + " " + " ".join(simbolos))
+
+    return lineas
+
+
+def dibujar_plano_y(cubo, y, mostrar_naves):
+    """
+    Arma el dibujo de un plano de y con encabezados de x y de z.
+    No imprime nada: devuelve las líneas para que las imprima partida.py.
+    Recibe: el cubo, y (de 1 a N) y mostrar_naves (bool).
+    Devuelve: lista de líneas (str).
+    """
+    n = len(cubo)
+    ancho = len("x" + str(n))
+    lineas = []
+    lineas.append("========= PLANO y = " + str(y) + " =========") 
+    encabezado = []
+    for x in range(1, n + 1):
+        encabezado.append(completar_ancho("x" + str(x), ancho))
+    lineas.append(completar_ancho("", ancho) + " " + " ".join(encabezado))
+
+    plano = obtener_plano_y(cubo, y)
+    for z in range(n):
+        simbolos = []
+        for x in range(n):
+            simbolo = simbolo_de_estado(plano[z][x], mostrar_naves)
+            simbolos.append(completar_ancho(simbolo, ancho))
+        etiqueta = completar_ancho("z" + str(z + 1), ancho)
+        lineas.append(etiqueta + " " + " ".join(simbolos)) 
     return lineas
