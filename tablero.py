@@ -301,3 +301,25 @@ def dibujar_plano_y(cubo, y, mostrar_naves):
         etiqueta = completar_ancho("z" + str(z + 1), ancho)
         lineas.append(etiqueta + " " + " ".join(simbolos)) 
     return lineas
+
+
+def vecinos_de_celda(cubo, z, x, y):
+    """
+    Arma la lista de celdas vecinas de una celda: las que están a 1 de distancia
+    en cualquier dirección (incluyendo diagonales). No se toma la celda misma.
+    No imprime nada: devuelve la lista de vecinos para que la use partida.py.
+    Recibe: el cubo, z, x, y (de 1 a N).
+    Devuelve: la lista de tuplas (z, x, y) de los vecinos que están dentro del cubo.
+    """
+    vecinos = []
+    for mov_z in [-1,0,1]:
+        for mov_x in [-1,0,1]:
+            for mov_y in [-1,0,1]:
+                if mov_z !=0 or mov_y !=0 or mov_x !=0:
+                  vecino_z = z + mov_z
+                  vecino_x = x + mov_x
+                  vecino_y = y + mov_y
+                  if punto_dentro_del_cubo(cubo, vecino_z, vecino_x, vecino_y):
+                      vecinos.append((vecino_z, vecino_x, vecino_y))
+
+    return vecinos
