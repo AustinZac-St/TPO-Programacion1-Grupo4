@@ -88,6 +88,28 @@ def test_hay_ganador_sin_flotas_ubicadas():
     assert partida.hay_ganador(estado) is None
 
 
+def test_pedir_jugada_con_torpedo(monkeypatch):
+    responder(monkeypatch, ["t", "4,2,7"])
+    jugada = partida.pedir_jugada()
+    assert jugada["arma"] == "T"
+    assert jugada["objetivo"] == (4, 2, 7)
+    assert jugada["eje"] is None
+
+
+def test_pedir_jugada_vuelve_a_preguntar_si_el_dato_es_invalido(monkeypatch, capsys):
+    responder(monkeypatch, ["h", "t", "4,2", "4,2,7"])
+    jugada = partida.pedir_jugada()
+    assert jugada["arma"] == "T"
+    assert "Dato invalido" in capsys.readouterr().out
+
+
+def test_pedir_jugada_con_laser_pide_el_eje(monkeypatch):
+    responder(monkeypatch, ["L", "1,1,1", "x"])
+    jugada = partida.pedir_jugada()
+    assert jugada["arma"] == "L"
+    assert jugada["eje"] == "x"
+
+
 def test_texto_a_tramo():
     assert partida.texto_a_tramo("3,4,2-3,4,7") == ((3, 4, 2), (3, 4, 7))
     assert partida.texto_a_tramo(" 3, 4 ,2 - 3,4,7 ") == ((3, 4, 2), (3, 4, 7))

@@ -56,6 +56,10 @@ PATRON_NUMERO = r"^\s*(\d+)\s*$"
 PATRON_TRAMO = (r"^\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*-"
                 r"\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*$")
 
+PATRON_ARMA = r"^\s*([TRCSLOGtrcslog])\s*$"
+PATRON_OBJETIVO = r"^\s*(\d+\s*,\s*\d+\s*,\s*\d+)\s*$"
+PATRON_EJE = r"^\s*([xyXY])\s*$"
+
 NOMBRES_POR_DEFECTO = ("Jugador 1", "Jugador 2")
 
 REFERENCIAS = ("Referencias:  ~ sin explorar   N nave   o agua   X impacto"
@@ -237,6 +241,19 @@ def pedir_dato(mensaje, patron):
         coincidencia = re.match(patron, input(mensaje))
     return coincidencia.group(1)
 
+
+def pedir_jugada():
+    """
+    Pide el arma, el objetivo y, si el arma es el barrido láser, el eje.
+    Devuelve: la jugada (dict con "arma", "objetivo" y "eje").
+    """
+    letra = pedir_dato("Arma:(T/R/C/S/L/O/G): ", PATRON_ARMA).upper()
+    texto = pedir_dato("Objetivo:(z,x,y): ", PATRON_OBJETIVO)
+    punto = tuple(tablero.texto_a_punto(texto))
+    eje = None
+    if letra == "L":
+        eje = pedir_dato("Eje:(x/y): ", PATRON_EJE).lower()
+    return {"arma": letra, "objetivo": punto, "eje": eje}
 
 def ubicacion_manual(jugador):
     """
