@@ -1,14 +1,16 @@
+
 import re
 from functools import reduce
 
-# Constantes
 
+# Constantes
 CANTIDAD_JUGADORES = 2
 
-# Expresiones regulares para validar los datos que se reciben
+#Expresiones regulares para validar los datos que se reciben
 PATRON_NOMBRE = r"^\w[\w ]{0,19}$"          
 PATRON_ARMA = r"^[A-Z]$"                    
-PATRON_PUNTO = r"^\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*$"   
+PATRON_PUNTO = r"^\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*$" 
+
 
 
 # Validaciones
@@ -71,6 +73,7 @@ def texto_a_punto(texto):
     if not es_punto_valido(punto):
         return None
     return punto
+
 
 # Historial en memoria
 
@@ -175,6 +178,8 @@ def finalizar_historial(historial, ganador):
     historial["ganador"] = ganador
     return True
 
+
+
 # Estadisticas
 
 def sumar_campo(jugadas, campo):
@@ -217,6 +222,66 @@ def contar_armas(jugadas):
     return uso
 
 
+def efectividad_por_arma(jugadas):
+    """Objetivo: calcula cuanto rindio cada arma.
+    Parametros:
+      jugadas (list): lista de jugadas.
+    Retorna:
+      dict: letra del arma -> diccionario con "usos", "impactos" y
+      "promedio" (impactos por uso, con 2 decimales)."""
+    efectividad = {}
+    for jugada in jugadas:
+        datos = efectividad.setdefault(jugada["arma"], {"usos": 0, "impactos": 0, "promedio": 0.0})
+        datos["usos"] = datos["usos"] + 1
+        datos["impactos"] = datos["impactos"] + jugada["impactos"]
+        datos["promedio"] = round(datos["impactos"] / datos["usos"], 2)
+    return efectividad
+
+
+def ranking_armas(jugadas):
+    """Objetivo: ordena las armas de la mas efectiva a la menos efectiva.
+    Parametros:
+      jugadas (list): lista de jugadas.
+    Retorna:
+      list: lista de tuplas (arma, promedio) ordenada por promedio de
+      mayor a menor. Lista vacia si no hay jugadas."""
+    efectividad = efectividad_por_arma(jugadas)
+    pares = [(arma, datos["promedio"]) for arma, datos in efectividad.items()]
+    return sorted(pares, key=lambda par: par[1], reverse=True)
+
+
+def capa_mas_atacada(jugadas):
+    """Objetivo: indica la capa z a la que mas se disparo.
+    Parametros:
+      jugadas (list): lista de jugadas.
+    Retorna:
+      int: el valor de z mas usado (si hay empate, el primero que se uso),
+      o None si no hay jugadas."""
+    capas = {}
+    for jugada in jugadas:
+        z = jugada["objetivo"][0]
+        capas[z] = capas.get(z, 0) + 1
+    if len(capas) == 0:
+        return None
+    return max(capas, key=capas.get)
+
+
+def contar_disparos_repetidos(jugadas):
+    """Objetivo: cuenta los disparos hechos a un punto ya apuntado antes.
+    Parametros:
+      jugadas (list): jugadas de un jugador, en orden.
+    Retorna:
+      int: cantidad de disparos repetidos (desperdiciados)."""
+    vistos = set()
+    repetidos = 0
+    for jugada in jugadas:
+        if jugada["objetivo"] in vistos:
+            repetidos = repetidos + 1
+        else:
+            vistos.add(jugada["objetivo"])
+    return repetidos
+
+
 def calcular_estadisticas(historial, jugador):
     """Objetivo: calcula las estadisticas de un jugador.
     Parametros:
@@ -225,8 +290,11 @@ def calcular_estadisticas(historial, jugador):
     Retorna:
       dict con: disparos, impactos, aguas, detectados, disparos_certeros,
       punteria (porcentaje de disparos certeros), naves_hundidas (list),
-      uso_armas (dict), arma_favorita (str o None), racha_maxima y
-      objetivos_distintos. Devuelve None si el jugador no es de la partida."""
+      cantidad_hundidas (int), uso_armas (dict), arma_favorita (str o None),
+      racha_maxima, objetivos_distintos, disparos_repetidos,
+      capa_mas_atacada (int o None), efectividad_armas (dict) y
+      ranking_armas (list de tuplas). Devuelve None si el jugador no es
+      de la partida."""
     if jugador not in historial["jugadores"]:
         return None
 
@@ -261,8 +329,13 @@ def calcular_estadisticas(historial, jugador):
         "naves_hundidas": naves_hundidas,
         "uso_armas": uso_armas,
         "arma_favorita": arma_favorita,
+        "cantidad_hundidas": len(naves_hundidas),
         "racha_maxima": calcular_racha_maxima(jugadas),
         "objetivos_distintos": len(objetivos),
+        "disparos_repetidos": contar_disparos_repetidos(jugadas),
+        "capa_mas_atacada": capa_mas_atacada(jugadas),
+        "efectividad_armas": efectividad_por_arma(jugadas),
+        "ranking_armas": ranking_armas(jugadas),
     }
 
 
@@ -276,9 +349,138 @@ def estadisticas_generales(historial):
             for jugador in historial["jugadores"]}
 
 
-# ---------------------------------------------------------------------------
+def lider_en(estadisticas, campo):
+    """Objetivo: indica que jugador tiene el valor mas alto en un campo.
+    Parametros:
+      estadisticas (dict): resultado de estadisticas_generales.
+      campo (str): por ejemplo "punteria" o "impactos".
+    Retorna:
+      str: nombre del jugador que va adelante, o None si hay empate."""
+    mejor = max(estadisticas, key=lambda nombre: estadisticas[nombre][campo])
+    empatados = [nombre for nombre in estadisticas
+                 if estadisticas[nombre][campo] == estadisticas[mejor][campo]]
+    if len(empatados) > 1:
+        return None
+    return mejor
+
+
+def comparar_jugadores(historial):
+    """Objetivo: compara a los dos jugadores de la partida.
+    Parametros:
+      historial (dict): el historial de la partida.
+    Retorna:
+      dict con:
+        lider_punteria, lider_impactos, lider_hundidas (str o None si
+        hay empate),
+        armas_en_comun (list): armas que usaron los dos,
+        armas_exclusivas (dict): jugador -> armas que solo uso el."""
+    estadisticas = estadisticas_generales(historial)
+    jugador1, jugador2 = historial["jugadores"]
+    armas1 = set(estadisticas[jugador1]["uso_armas"].keys())
+    armas2 = set(estadisticas[jugador2]["uso_armas"].keys())
+
+    return {
+        "lider_punteria": lider_en(estadisticas, "punteria"),
+        "lider_impactos": lider_en(estadisticas, "impactos"),
+        "lider_hundidas": lider_en(estadisticas, "cantidad_hundidas"),
+        "armas_en_comun": sorted(armas1 & armas2),
+        "armas_exclusivas": {
+            jugador1: sorted(armas1 - armas2),
+            jugador2: sorted(armas2 - armas1),
+        },
+    }
+
+
+def jugada_destacada(historial, jugador=None):
+    """Objetivo: busca la mejor jugada de la partida o de un jugador.
+    La mejor es la que mas naves hundio; si empatan, la de mas impactos.
+    Parametros:
+      historial (dict): el historial de la partida.
+      jugador (str o None): si es None busca entre todas las jugadas.
+    Retorna:
+      dict: la jugada destacada, o None si ninguna jugada tuvo impactos."""
+    jugadas = obtener_jugadas(historial, jugador)
+    con_impactos = list(filter(lambda jugada: jugada["impactos"] > 0, jugadas))
+    if len(con_impactos) == 0:
+        return None
+    return max(con_impactos, key=lambda jugada: (len(jugada["hundidas"]), jugada["impactos"]))
+
+
+
 # Resumen al terminar
-# ---------------------------------------------------------------------------
+
+
+def nombre_o_empate(nombre):
+    """Objetivo: devuelve el nombre, o "empate" si no hay lider.
+    Parametros:
+      nombre (str o None): resultado de lider_en.
+    Retorna:
+      str: el nombre o la palabra "empate"."""
+    if nombre is None:
+        return "empate"
+    return nombre
+
+
+def lista_o_guion(elementos):
+    """Objetivo: une una lista de textos con comas, o devuelve "-" si esta vacia.
+    Parametros:
+      elementos (list): lista de cadenas.
+    Retorna:
+      str: los elementos separados por coma, o "-"."""
+    if len(elementos) == 0:
+        return "-"
+    return ", ".join(elementos)
+
+
+def describir_jugada(jugada):
+    """Objetivo: arma una frase que describe una jugada.
+    Parametros:
+      jugada (dict): una jugada del historial.
+    Retorna:
+      str: por ejemplo "#5 de Ana con T en (5, 5, 5): 1 impacto(s)"."""
+    texto = (f"#{jugada['numero']} de {jugada['jugador']} con {jugada['arma']} "
+             f"en {jugada['objetivo']}: {jugada['impactos']} impacto(s)")
+    if len(jugada["hundidas"]) > 0:
+        texto = texto + ", hundio " + ", ".join(jugada["hundidas"])
+    return texto
+
+
+def resumen_jugador(jugador, datos):
+    """Objetivo: arma las lineas del resumen de un jugador.
+    Parametros:
+      jugador (str): nombre del jugador.
+      datos (dict): sus estadisticas (ver calcular_estadisticas).
+    Retorna:
+      list: lista de cadenas."""
+    if datos["arma_favorita"] is None:
+        favorita = "-"
+    else:
+        favorita = datos["arma_favorita"]
+    if datos["capa_mas_atacada"] is None:
+        capa = "-"
+    else:
+        capa = f"z = {datos['capa_mas_atacada']}"
+
+    lineas = [
+        "",
+        f"--- {jugador} ---",
+        f"Disparos: {datos['disparos']}   Certeros: {datos['disparos_certeros']}"
+        f"   Punteria: {datos['punteria']:.1f}%",
+        f"Impactos: {datos['impactos']}   Agua: {datos['aguas']}"
+        f"   Detectados: {datos['detectados']}",
+        f"Racha maxima de aciertos: {datos['racha_maxima']}",
+        f"Arma mas usada: {favorita}",
+        f"Capa mas atacada: {capa}",
+        f"Disparos repetidos: {datos['disparos_repetidos']}",
+        f"Naves hundidas ({datos['cantidad_hundidas']}): {lista_o_guion(datos['naves_hundidas'])}",
+    ]
+
+    if len(datos["ranking_armas"]) > 0:
+        lineas.append("Ranking de armas (impactos por uso):")
+        for posicion, (arma, promedio) in enumerate(datos["ranking_armas"]):
+            lineas.append(f"  {posicion + 1}. {arma}  {promedio:.2f}")
+    return lineas
+
 
 def generar_resumen(historial):
     """Objetivo: arma el resumen de la partida como lineas de texto.
@@ -293,30 +495,34 @@ def generar_resumen(historial):
         texto_ganador = f"Ganador: {historial['ganador']}"
 
     lineas = [
-        "===== RESUMEN DE LA PARTIDA =====",
+        "=" * 36,
+        "       RESUMEN DE LA PARTIDA",
+        "=" * 36,
         texto_ganador,
         f"Jugadas totales: {len(historial['jugadas'])}",
     ]
 
     estadisticas = estadisticas_generales(historial)
     for jugador, datos in estadisticas.items():
-        if len(datos["naves_hundidas"]) > 0:
-            hundidas = ", ".join(datos["naves_hundidas"])
-        else:
-            hundidas = "ninguna"
-        if datos["arma_favorita"] is None:
-            favorita = "-"
-        else:
-            favorita = datos["arma_favorita"]
+        lineas.extend(resumen_jugador(jugador, datos))
 
-        lineas.append("")
-        lineas.append(f"--- {jugador} ---")
-        lineas.append(f"Disparos: {datos['disparos']}")
-        lineas.append(f"Impactos: {datos['impactos']}   Agua: {datos['aguas']}"
-                      f"   Detectados: {datos['detectados']}")
-        lineas.append(f"Punteria: {datos['punteria']}%")
-        lineas.append(f"Racha maxima de aciertos: {datos['racha_maxima']}")
-        lineas.append(f"Arma mas usada: {favorita}")
-        lineas.append(f"Naves hundidas: {hundidas}")
+    comparacion = comparar_jugadores(historial)
+    jugador1, jugador2 = historial["jugadores"]
+    lineas.append("")
+    lineas.append("-" * 12 + " COMPARACION " + "-" * 11)
+    lineas.append(f"Mejor punteria: {nombre_o_empate(comparacion['lider_punteria'])}")
+    lineas.append(f"Mas impactos: {nombre_o_empate(comparacion['lider_impactos'])}")
+    lineas.append(f"Mas naves hundidas: {nombre_o_empate(comparacion['lider_hundidas'])}")
+    lineas.append(f"Armas usadas por los dos: {lista_o_guion(comparacion['armas_en_comun'])}")
+    for jugador in (jugador1, jugador2):
+        exclusivas = comparacion["armas_exclusivas"][jugador]
+        lineas.append(f"Armas que uso solo {jugador}: {lista_o_guion(exclusivas)}")
+
+    destacada = jugada_destacada(historial)
+    lineas.append("")
+    if destacada is None:
+        lineas.append("Jugada destacada: ninguna")
+    else:
+        lineas.append(f"Jugada destacada: {describir_jugada(destacada)}")
 
     return lineas
