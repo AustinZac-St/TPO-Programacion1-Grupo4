@@ -59,6 +59,7 @@ PATRON_TRAMO = (r"^\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*-"
 PATRON_ARMA = r"^\s*([TRCSLOGtrcslog])\s*$"
 PATRON_OBJETIVO = r"^\s*(\d+\s*,\s*\d+\s*,\s*\d+)\s*$"
 PATRON_EJE = r"^\s*([xyXY])\s*$"
+PATRON_OPCION_TURNO = r"^\s*([1-3])\s*$"
 
 NOMBRES_POR_DEFECTO = ("Jugador 1", "Jugador 2")
 
@@ -255,6 +256,126 @@ def pedir_jugada():
         eje = pedir_dato("Eje:(x/y): ", PATRON_EJE).lower()
     return {"arma": letra, "objetivo": punto, "eje": eje}
 
+
+def mostrar_municion(jugador):
+    """
+    Muestra la munición que le queda al jugador en cada arma.
+    Recibe: jugador (dict).
+    Devuelve: nada.
+    """
+    partes = []
+    for letra, cantidad in jugador["municion"].items():
+        if cantidad is None:
+            texto = "ilimitada"
+        else:
+            texto = str(cantidad)
+        partes.append(letra + ": " + texto)
+    print("Municion -> " + "   ".join(partes))
+
+
+def mostrar_resultado(resumen):
+    """
+    Muestra el resultado de un disparo con los textos que arma flota.py.
+    Recibe: resumen (dict que devuelve flota.resumen_disparo).
+    Devuelve: nada.
+    """
+    for mensaje in resumen["mensajes"]:
+        print(mensaje)
+    for nombre in resumen["hundidas"]:
+        print("Hundiste: " + nombre)
+    if len(resumen["efectos"]) > 0:
+        print("Efectos para la Entrega 3: " + ", ".join(resumen["efectos"]))
+
+
+def disparar(estado):
+    """
+    Pide una jugada y la ejecuta. Si hay un error, lo informa y no se
+    juega el turno.
+    Recibe: estado (dict de la partida).
+    Devuelve: True si el disparo se realizó, False si hubo un error.
+    """
+    jugada = pedir_jugada()
+    jugado = False
+    try:
+        ejecutar_turno(estado, jugada)
+    except ErrorPartida as error:
+        print("No se pudo disparar: " + str(error))
+    except armamento.SinMunicion as error:
+        print("No se pudo disparar: " + str(error))
+    except flota.DisparoInvalido as error:
+        print("No se pudo disparar: " + str(error))
+    else:
+        mostrar_resultado(estado["ultimo_resumen"])
+        jugado = True
+    finally:
+        print("--------------------")
+    return jugado
+
+
+def ver_mi_cubo(estado):
+    """
+    Dibuja el cubo del jugador al que le toca, con sus naves.
+    Recibe: estado (dict de la partida).
+    Devuelve: False, porque ver el cubo no gasta el turno.
+    """
+    jugador = estado["jugadores"][estado["turno"]]
+    return ver_cubo(jugador)
+
+
+def ver_cubo_rival(estado):
+    """
+    Dibuja el cubo del rival sin mostrar sus naves.
+    Recibe: estado (dict de la partida).
+    Devuelve: False, porque ver el cubo no gasta el turno.
+    """
+    rival = estado["jugadores"][1 - estado["turno"]]
+    return ver_cubo(rival, False)
+
+
+OPCIONES_TURNO = {
+    "1": disparar,
+    "2": ver_mi_cubo,
+    "3": ver_cubo_rival,
+}
+
+
+def turno_de_jugador(estado):
+    """
+    Juega el turno del jugador al que le toca: muestra el menú del turno
+    hasta que logre disparar.
+    Recibe: estado (dict de la partida).
+    Devuelve: nada. El estado queda con el turno cambiado.
+    """
+    jugador = estado["jugadores"][estado["turno"]]
+    print()
+    print("=== Turno de " + jugador["nombre"] + " ===")
+    mostrar_municion(jugador)
+    jugado = False
+    while not jugado:
+        print("1 - Disparar")
+        print("2 - Ver mi cubo")
+        print("3 - Ver el cubo del rival")
+        opcion = pedir_dato("Opcion: ", PATRON_OPCION_TURNO)
+        jugado = OPCIONES_TURNO[opcion](estado)
+
+
+def jugar_partida(estado):
+    """
+    Repite los turnos uno por jugador hasta que alguien hunda toda la
+    flota del rival.Anota al ganador en el historial.
+    Recibe: estado (dict de la partida, con las flotas ya ubicadas).
+    Devuelve: el nombre del ganador (str).
+    """
+    ganador = hay_ganador(estado)
+    while ganador is None:
+        turno_de_jugador(estado)
+        ganador = hay_ganador(estado)
+    registro.finalizar_historial(estado["historial"], ganador)
+    print()
+    print("Gano " + ganador + ". Hundio toda la flota del rival.")
+    return ganador
+
+
 def ubicacion_manual(jugador):
     """
     Pide naves y tramos hasta completar la flota o hasta que se tipee 0.
@@ -306,10 +427,10 @@ def ubicacion_automatica(jugador):
     return False
 
 
-def ver_cubo(jugador):
+def ver_cubo(jugador, mostrar_naves=True):
     """
     Dibuja el cubo del jugador, una capa de z o todas, con sus naves.
-    Recibe: jugador (dict).
+    Recibe: jugador (dict)  y mostrar_naves (bool, True si se ven las naves).
     Devuelve: False, para que el submenú de ubicación se vuelva a mostrar.
     """
     n = len(jugador["cubo"])
@@ -323,7 +444,7 @@ def ver_cubo(jugador):
     else:
         capas = [z]
     print()
-    for linea in lineas_del_cubo(jugador["cubo"], capas, True):
+    for linea in lineas_del_cubo(jugador["cubo"], capas, mostrar_naves):
         print(linea)
     return False
 
@@ -376,8 +497,8 @@ def partida_uno_contra_uno():
     for jugador in estado["jugadores"]:
         submenu_ubicacion(jugador)
     print()
-    print("Las dos flotas estan ubicadas.")
-    print("Los turnos se agregan en la Entrega 2.")
+    print("Las dos flotas estan ubicadas.Empieza la partida.")
+    jugar_partida(estado)
     return False
 
 

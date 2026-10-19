@@ -176,6 +176,7 @@ def test_continuar_exige_la_flota_completa(capsys):
 
 
 def test_programa_completo_de_punta_a_punta(monkeypatch, capsys):
+    monkeypatch.setattr(partida, "jugar_partida", lambda estado: None)
     responder(monkeypatch, [
         "7", "2",               # opcion invalida y opcion aun no disponible
         "1",                    # partida uno contra uno
@@ -202,3 +203,93 @@ def test_main_no_se_corta_si_se_cierra_la_entrada(monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", sin_entrada)
     partida.main()
     assert "Programa interrumpido." in capsys.readouterr().out
+
+def partida_lista():
+    estado = partida.nueva_partida_1v1()
+    for jugador in estado["jugadores"]:
+        partida.ubicacion_automatica(jugador)
+    return estado
+
+
+def test_turno_de_jugador_dispara_y_pasa_el_turno(monkeypatch, capsys):
+    estado = partida_lista()
+    responder(monkeypatch, ["1", "t", "1,1,1"])
+    partida.turno_de_jugador(estado)
+    salida = capsys.readouterr().out
+    assert "=== Turno de Jugador 1 ===" in salida
+    assert estado["turno"] == 1
+    assert len(estado["historial"]["jugadas"]) == 1
+
+
+def test_turno_de_jugador_informa_el_error_y_vuelve_a_pedir(monkeypatch, capsys):
+    estado = partida_lista()
+    responder(monkeypatch, [
+        "1", "s", "1,1,1",      # sonar: todavia no esta disponible
+        "1", "t", "99,1,1",     # fuera del cubo
+        "1", "t", "1,1,1",
+    ])
+    partida.turno_de_jugador(estado)
+    salida = capsys.readouterr().out
+    assert salida.count("No se pudo disparar") == 2
+    assert estado["turno"] == 1
+    assert len(estado["historial"]["jugadas"]) == 1
+
+
+def test_turno_de_jugador_sin_municion(monkeypatch, capsys):
+    estado = partida_lista()
+    estado["jugadores"][0]["municion"]["R"] = 0
+    responder(monkeypatch, ["1", "r", "1,1,1", "1", "t", "1,1,1"])
+    partida.turno_de_jugador(estado)
+    assert "No queda municion" in capsys.readouterr().out
+    assert estado["turno"] == 1
+
+
+def test_turno_de_jugador_ver_cubos_no_gasta_el_turno(monkeypatch, capsys):
+    estado = partida_lista()
+    responder(monkeypatch, ["2", "1", "3", "1", "1", "t", "1,1,1"])
+    partida.turno_de_jugador(estado)
+    salida = capsys.readouterr().out
+    assert salida.count("========= CAPA z = 1 =========") == 2
+    assert estado["turno"] == 1
+
+
+def test_mostrar_resultado_muestra_mensajes_y_hundidas(capsys):
+    resumen = {"impactos": 1, "aguas": 0, "hundidas": ["Fragata"],
+               "efectos": [], "mensajes": ["Impacto. Fragata hundida."]}
+    partida.mostrar_resultado(resumen)
+    salida = capsys.readouterr().out
+    assert "Impacto. Fragata hundida." in salida
+    assert "Hundiste: Fragata" in salida
+
+
+def test_mostrar_municion(capsys):
+    jugador = partida.nueva_partida_1v1()["jugadores"][0]
+    partida.mostrar_municion(jugador)
+    assert "T: ilimitada" in capsys.readouterr().out
+
+
+def respuestas_para_hundir(estado, indice_jugador):
+    """Arma los tipeos que hunden toda la flota del rival, celda por celda."""
+    rival = estado["jugadores"][1 - indice_jugador]
+    respuestas = []
+    for nave in rival["flota"]:
+        for (z, x, y) in sorted(nave["celdas"]):
+            punto = str(z) + "," + str(x) + "," + str(y)
+            respuestas.extend(["1", "t", punto])
+            respuestas.extend(["1", "t", punto])   # el portaaviones aguanta 2 impactos por celda
+    return respuestas
+
+
+def test_jugar_partida_termina_cuando_hay_ganador(monkeypatch, capsys):
+    estado = partida_lista()
+    # El jugador 1 acierta siempre; el jugador 2 dispara siempre a (1,1,1)
+    tipeos_1 = respuestas_para_hundir(estado, 0)
+    respuestas = []
+    for tipeo in range(0, len(tipeos_1), 3):
+        respuestas.extend(tipeos_1[tipeo:tipeo + 3])      # turno del jugador 1
+        respuestas.extend(["1", "t", "1,1,1"])             # turno del jugador 2
+    responder(monkeypatch, respuestas)
+    ganador = partida.jugar_partida(estado)
+    assert ganador == "Jugador 1"
+    assert estado["historial"]["ganador"] == "Jugador 1"
+    assert "Gano Jugador 1" in capsys.readouterr().out
