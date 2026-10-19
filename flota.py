@@ -26,22 +26,36 @@ Reglas implementadas:
 
 Mitades de z: inferior z <= N//2, superior z > N//2. Con N impar la capa del
 medio pertenece a la mitad SUPERIOR (con N=7: inferior 1..3, superior 4..7).
+
+Entrega 2 - Impactos, naves averiadas y hundidas:
+- Cada nave guarda ademas "golpes": {punto: cantidad de impactos recibidos}.
+  Una celda queda destruida (entra en "impactos") cuando sus golpes llegan a
+  la "resistencia" de la nave.
+- Comportamientos propios (son datos del catalogo, sin if/elif):
+  - Portaaviones (P): resistencia 2, cada celda necesita dos impactos.
+  - Submarino (S): inmune al barrido laser (L).
+  - Destructor (D): al ser impactado revela una celda ocupada del rival.
+  - Estacion orbital (E): al hundirse otorga municion extra.
+  Los efectos de D y E solo se informan; los aplica el integrador.
+- Estados de una nave: intacta, averiada (algun impacto) o hundida (todas
+  sus celdas destruidas). Al hundirse, sus celdas pasan a HUNDIDO en el cubo.
 """
 
 import random
 from itertools import product
 
-from tablero import SIN_EXPLORAR, NAVE_OCULTA, escribir_celda
+from tablero import (SIN_EXPLORAR, NAVE_OCULTA, AGUA_MARCADA, IMPACTO, HUNDIDO,
+                     escribir_celda, leer_celda)
 
-Punto = tuple[int, int, int]  # (z, x, y), indices de 1 a N
+Punto = tuple[int, int, int]  
 
-MAX_INTENTOS_NAVE = 200  # intentos al azar por nave
-MAX_REINICIOS = 50       # veces que se reinicia la flota completa si se traba
+MAX_INTENTOS_NAVE = 200  #intentos al azar por nave
+MAX_REINICIOS = 50       #veces que se reinicia la flota completa si se traba
 
 
-# --------------------------------------------------------------------------
+
 # Excepciones propias (clase base + subclases)
-# --------------------------------------------------------------------------
+
 class ErrorFlota(Exception):
     """Clase base de los errores de este modulo."""
 
@@ -58,9 +72,13 @@ class UbicacionInvalida(ErrorFlota):
     """La ubicacion propuesta no cumple las reglas."""
 
 
-# --------------------------------------------------------------------------
+class DisparoInvalido(ErrorFlota):
+    """El punto disparado no es valido (formato incorrecto o fuera del cubo)."""
+
+
+
 # Catalogo. Las restricciones son datos (funciones z_valido), sin if/elif.
-# --------------------------------------------------------------------------
+
 def _z_cualquiera(z: int, n: int) -> bool:
     return True
 
@@ -80,18 +98,29 @@ def _z_sin_extremos(z: int, n: int) -> bool:
 # forma "linea": "largo" es el largo de la recta; forma "bloque": "largo" es el lado del cubo.
 CATALOGO = {
     "F": {"nombre": "Fragata", "forma": "linea", "largo": 2, "cantidad": 3,
-          "z_valido": _z_cualquiera, "evita_caras": False},
+          "z_valido": _z_cualquiera, "evita_caras": False,
+          "resistencia": 1, "inmune_a": (), "efecto": None, "femenino": True},
     "D": {"nombre": "Destructor", "forma": "linea", "largo": 3, "cantidad": 2,
-          "z_valido": _z_cualquiera, "evita_caras": False},
+          "z_valido": _z_cualquiera, "evita_caras": False,
+          "resistencia": 1, "inmune_a": (), "efecto": "revela_celda"},
     "S": {"nombre": "Submarino", "forma": "linea", "largo": 3, "cantidad": 2,
-          "z_valido": _z_mitad_inferior, "evita_caras": False},
+          "z_valido": _z_mitad_inferior, "evita_caras": False,
+          "resistencia": 1, "inmune_a": ("L",), "efecto": None},
     "C": {"nombre": "Crucero", "forma": "linea", "largo": 4, "cantidad": 1,
-          "z_valido": _z_sin_extremos, "evita_caras": False},
+          "z_valido": _z_sin_extremos, "evita_caras": False,
+          "resistencia": 1, "inmune_a": (), "efecto": None},
     "P": {"nombre": "Portaaviones", "forma": "linea", "largo": 5, "cantidad": 1,
-          "z_valido": _z_mitad_superior, "evita_caras": False},
+          "z_valido": _z_mitad_superior, "evita_caras": False,
+          "resistencia": 2, "inmune_a": (), "efecto": None},
     "E": {"nombre": "Estacion orbital", "forma": "bloque", "largo": 2, "cantidad": 1,
-          "z_valido": _z_sin_extremos, "evita_caras": True},
+          "z_valido": _z_sin_extremos, "evita_caras": True,
+          "resistencia": 1, "inmune_a": (), "efecto": "municion_extra", "femenino": True},
 }
+
+# Momento en que se dispara el efecto propio de cada nave.
+# "revela_celda" ocurre en cada impacto; "municion_extra" solo al hundirse.
+EFECTO_AL_IMPACTAR = ("revela_celda",)
+EFECTO_AL_HUNDIRSE = ("municion_extra",)
 
 
 def cantidad_celdas(spec: dict) -> int:
@@ -99,9 +128,9 @@ def cantidad_celdas(spec: dict) -> int:
     return spec["largo"] ** 3 if spec["forma"] == "bloque" else spec["largo"]
 
 
-# --------------------------------------------------------------------------
+
 # Geometria basica
-# --------------------------------------------------------------------------
+
 def distancia_chebyshev(a: Punto, b: Punto) -> int:
     """Devuelve la distancia Chebyshev: el mayor salto en valor absoluto."""
     return max(abs(a[0] - b[0]), abs(a[1] - b[1]), abs(a[2] - b[2]))
@@ -161,9 +190,9 @@ def puntos_de_tramo(tipo: str, desde: Punto, hasta: Punto,
     return list(product(*rangos))
 
 
-# --------------------------------------------------------------------------
+
 # Validacion
-# --------------------------------------------------------------------------
+
 def _forma_linea(spec: dict, puntos: list[Punto]) -> bool:
     largo = spec["largo"]
     spans = [max(p[i] for p in puntos) - min(p[i] for p in puntos) for i in range(3)]
@@ -209,12 +238,12 @@ def validar_ubicacion_nave(tipo: str, puntos: list[Punto], n: int,
     if spec["evita_caras"] and any(not (1 < c < n) for p in puntos for c in p):
         raise UbicacionInvalida(f"{spec['nombre']}: no puede tocar una cara exterior.")
 
-    # Solapamiento directo (se revisa primero para dar el mensaje correcto).
+    # Solapamiento directo
     choque = set(puntos) & set(puntos_existentes)
     if choque:
         raise UbicacionInvalida(f"La celda {min(choque)} ya esta ocupada.")
 
-    # Separacion: distancia Chebyshev >= 2 con toda celda de otra nave.
+    # Separacion:
     for p in puntos:
         for q in puntos_existentes:
             if distancia_chebyshev(p, q) < 2:
@@ -245,9 +274,8 @@ def validar_flota(ubicaciones: list[tuple[str, list[Punto]]], n: int,
     return True, ""
 
 
-# --------------------------------------------------------------------------
 # Consultas sobre la flota
-# --------------------------------------------------------------------------
+
 def contar_colocadas(flota: list[dict], letra: str) -> int:
     """Recibe la flota y una letra; devuelve cuantas naves de ese tipo hay."""
     return sum(1 for nave in flota if nave["tipo"] == letra)
@@ -269,9 +297,9 @@ def puntos_ocupados(flota: list[dict]) -> set[Punto]:
     return {p for nave in flota for p in nave["celdas"]}
 
 
-# --------------------------------------------------------------------------
+
 # Ubicacion manual
-# --------------------------------------------------------------------------
+
 def _ubicar(cubo: list, flota: list[dict], catalogo: dict, letra: str,
             desde: Punto, hasta: Punto) -> tuple[list, list[dict]]:
     """Nucleo de la ubicacion: valida, escribe en el cubo y registra la nave."""
@@ -286,6 +314,7 @@ def _ubicar(cubo: list, flota: list[dict], catalogo: dict, letra: str,
         "tipo": letra,
         "celdas": set(puntos),
         "impactos": set(),
+        "golpes": {},
     })
     return cubo, flota
 
@@ -302,9 +331,8 @@ def ubicar_nave(cubo: list, flota: list[dict], nave: str,
     return _ubicar(cubo, flota, CATALOGO, str(nave).upper(), desde, hasta)
 
 
-# --------------------------------------------------------------------------
+
 # Ubicacion automatica
-# --------------------------------------------------------------------------
 def _tramo_al_azar(rng: random.Random, spec: dict, n: int) -> tuple[Punto, Punto]:
     saltos = spec["largo"] - 1
     if spec["forma"] == "bloque":
@@ -343,7 +371,7 @@ def ubicacion_automatica(cubo: list, catalogo: dict = CATALOGO,
     Lanza: ErrorFlota si tras MAX_REINICIOS intentos no logra ubicarla.
     """
     rng = random.Random(semilla)
-    # Primero las naves grandes: son las que mas cuesta acomodar.
+   
     orden = sorted(catalogo, key=lambda l: -cantidad_celdas(catalogo[l]))
     for _ in range(MAX_REINICIOS):
         flota: list[dict] = []
@@ -358,8 +386,243 @@ def ubicacion_automatica(cubo: list, catalogo: dict = CATALOGO,
     raise ErrorFlota("No se pudo ubicar la flota automaticamente.")
 
 
+
+# Entrega 2: estado de las naves
+
+def buscar_nave(flota, punto):
+    """Busca la nave que ocupa un punto.
+
+    Recibe: la flota (lista de naves) y un punto (z, x, y).
+    Devuelve: el diccionario de la nave, o None si el punto es agua.
+    """
+    for nave in flota:
+        if punto in nave["celdas"]:
+            return nave
+    return None
+
+
+def esta_hundida(nave):
+    """Recibe una nave; devuelve True si todas sus celdas estan destruidas."""
+    return len(nave["impactos"]) == len(nave["celdas"])
+
+
+def esta_averiada(nave):
+    """Recibe una nave; devuelve True si tiene impactos pero sigue a flote."""
+    return len(nave["impactos"]) > 0 and not esta_hundida(nave)
+
+
+def estado_nave(nave):
+    """Indica el estado de una nave.
+
+    Recibe: una nave.
+    Devuelve: "hundida", "averiada" o "intacta" (str).
+    """
+    if esta_hundida(nave):
+        return "hundida"
+    if esta_averiada(nave):
+        return "averiada"
+    return "intacta"
+
+
+def naves_averiadas(flota):
+    """Recibe la flota; devuelve la lista de naves averiadas."""
+    return list(filter(esta_averiada, flota))
+
+
+def naves_hundidas(flota):
+    """Recibe la flota; devuelve la lista de naves hundidas."""
+    return list(filter(esta_hundida, flota))
+
+
+def naves_a_flote(flota):
+    """Recibe la flota; devuelve la lista de naves que no estan hundidas."""
+    return [nave for nave in flota if not esta_hundida(nave)]
+
+
+def flota_hundida(flota):
+    """Indica si toda la flota fue hundida (sirve para saber si hay ganador).
+
+    Recibe: la flota.
+    Devuelve: True si hay naves y todas estan hundidas; False en otro caso.
+    """
+    return len(flota) > 0 and len(naves_a_flote(flota)) == 0
+
+
+def describir_nave(nave, catalogo=CATALOGO):
+    """Arma el texto del estado de una nave, como lo pide la consigna.
+
+    Recibe: una nave y el catalogo.
+    Devuelve: por ejemplo "Destructor averiado (1 de 3)" o "Fragata hundida".
+    """
+    spec = catalogo[nave["tipo"]]
+    terminacion = "a" if spec.get("femenino", False) else "o"
+    if esta_hundida(nave):
+        return f"{spec['nombre']} hundid{terminacion}"
+    if esta_averiada(nave):
+        return (f"{spec['nombre']} averiad{terminacion} "
+                f"({len(nave['impactos'])} de {len(nave['celdas'])})")
+    return f"{spec['nombre']} intact{terminacion}"
+
+
+def estado_de_flota(flota, catalogo=CATALOGO):
+    """Resume el estado de cada nave de la flota.
+
+    Recibe: la flota y el catalogo.
+    Devuelve: lista de diccionarios, uno por nave, con "id", "nombre",
+              "estado", "destruidas" y "total".
+    """
+    return [{"id": nave["id"],
+             "nombre": catalogo[nave["tipo"]]["nombre"],
+             "estado": estado_nave(nave),
+             "destruidas": len(nave["impactos"]),
+             "total": len(nave["celdas"])}
+            for nave in flota]
+
+
+
+# Entrega 2: impactos
+def _validar_punto_disparo(cubo, punto):
+    """Lanza DisparoInvalido si el punto no es (z, x, y) dentro del cubo."""
+    if type(punto) not in (tuple, list) or len(punto) != 3:
+        raise DisparoInvalido(f"El punto {punto} no tiene la forma (z, x, y).")
+    if not all(type(c) == int for c in punto) or not dentro_del_cubo(punto, len(cubo)):
+        raise DisparoInvalido(f"El punto {punto} esta fuera del cubo.")
+
+
+def _resultado(resultado, nave=None, efecto=None, mensaje="Agua."):
+    """Arma el diccionario que devuelve recibir_impacto."""
+    return {
+        "resultado": resultado,
+        "nave": None if nave is None else nave["id"],
+        "tipo": None if nave is None else nave["tipo"],
+        "hundida": nave is not None and esta_hundida(nave),
+        "efecto": efecto,
+        "mensaje": mensaje,
+    }
+
+
+def _hundir(cubo, nave):
+    """Marca como HUNDIDO todas las celdas de una nave en el cubo."""
+    for punto in nave["celdas"]:
+        escribir_celda(cubo, *punto, HUNDIDO)
+
+
+def recibir_impacto(cubo, flota, punto, arma=None, catalogo=CATALOGO):
+    """Aplica un impacto sobre una celda de la flota (y del cubo) del rival.
+
+    Reglas:
+    - Agua: la celda pasa a AGUA_MARCADA.
+    - Nave: suma un golpe a la celda. Cuando llega a la resistencia de la
+      nave (2 para el portaaviones), la celda queda destruida y pasa a
+      IMPACTO. Si se destruyen todas, la nave se hunde y sus celdas pasan a
+      HUNDIDO.
+    - Si la nave es inmune al arma (submarino contra laser) no pasa nada.
+    - Una celda ya destruida o ya marcada como agua no cambia.
+
+    Recibe: cubo y flota del rival, punto (z, x, y), letra del arma (o None)
+            y catalogo.
+    Devuelve: diccionario con
+        "resultado": "agua", "impacto", "resiste", "inmune" o "repetido",
+        "nave": id de la nave o None,  "tipo": letra o None,
+        "hundida": bool,
+        "efecto": "revela_celda", "municion_extra" o None,
+        "mensaje": texto para mostrar, por ejemplo
+                   "Impacto. Destructor averiado (1 de 3)."
+    Lanza: DisparoInvalido si el punto no es valido.
+    """
+    _validar_punto_disparo(cubo, punto)
+    punto = tuple(punto)
+    nave = buscar_nave(flota, punto)
+
+    if nave is None:
+        if leer_celda(cubo, *punto) == AGUA_MARCADA:
+            return _resultado("repetido", mensaje="Ya se habia disparado ahi.")
+        escribir_celda(cubo, *punto, AGUA_MARCADA)
+        return _resultado("agua")
+
+    spec = catalogo[nave["tipo"]]
+    if punto in nave["impactos"]:
+        return _resultado("repetido", nave, mensaje="Ya se habia disparado ahi.")
+    if arma is not None and str(arma).upper() in spec.get("inmune_a", ()):
+        
+        return _resultado("inmune", nave)
+
+    golpes = nave.setdefault("golpes", {})
+    golpes[punto] = golpes.get(punto, 0) + 1
+    resistencia = spec.get("resistencia", 1)
+    if golpes[punto] < resistencia:
+        return _resultado("resiste", nave, mensaje=(
+            f"Impacto. {spec['nombre']} resiste "
+            f"(celda danada {golpes[punto]} de {resistencia})."))
+
+    nave["impactos"].add(punto)
+    escribir_celda(cubo, *punto, IMPACTO)
+    if esta_hundida(nave):
+        _hundir(cubo, nave)
+    efecto = spec.get("efecto")
+    corresponde = (efecto in EFECTO_AL_IMPACTAR
+                   or (efecto in EFECTO_AL_HUNDIRSE and esta_hundida(nave)))
+    if not corresponde:
+        efecto = None
+    return _resultado("impacto", nave, efecto,
+                      f"Impacto. {describir_nave(nave, catalogo)}.")
+
+
+def disparar_celdas(cubo, flota, celdas, arma=None, catalogo=CATALOGO):
+    """Aplica un impacto en cada una de las celdas que afecta un arma.
+
+    Recibe: cubo y flota del rival, lista de puntos (la que devuelve la
+            funcion del arma en armamento.py), letra del arma y catalogo.
+    Devuelve: lista con el resultado de cada celda (ver recibir_impacto).
+    Lanza: DisparoInvalido si alguna celda no es valida; las celdas
+           anteriores ya quedan aplicadas.
+    """
+    return [recibir_impacto(cubo, flota, punto, arma, catalogo) for punto in celdas]
+
+
+def resumen_disparo(resultados, catalogo=CATALOGO):
+    """Junta los resultados de un disparo en un solo resumen.
+
+    Los datos coinciden con lo que pide registro.registrar_jugada.
+    Recibe: la lista que devuelve disparar_celdas y el catalogo.
+    Devuelve: diccionario con "impactos" (int), "aguas" (int),
+              "hundidas" (lista de nombres de naves hundidas en este disparo),
+              "efectos" (lista de efectos a aplicar) y
+              "mensajes" (lista de textos sin repetir, en orden).
+    """
+    impactos = len([r for r in resultados if r["resultado"] in ("impacto", "resiste")])
+    aguas = len([r for r in resultados if r["resultado"] in ("agua", "inmune")])
+    hundidas = []
+    for r in resultados:
+        nombre = None if r["tipo"] is None else catalogo[r["tipo"]]["nombre"]
+        if r["resultado"] == "impacto" and r["hundida"] and nombre not in hundidas:
+            hundidas.append(nombre)
+    efectos = [r["efecto"] for r in resultados if r["efecto"] is not None]
+    mensajes = []
+    for r in resultados:
+        if r["mensaje"] not in mensajes:
+            mensajes.append(r["mensaje"])
+    return {"impactos": impactos, "aguas": aguas, "hundidas": hundidas,
+            "efectos": efectos, "mensajes": mensajes}
+
+
+def celda_para_revelar(flota, semilla=None):
+    """Elige una celda ocupada y todavia no destruida de una flota.
+
+    Sirve para el efecto del destructor: cuando lo impactan, se revela una
+    celda ocupada del RIVAL (se le pasa la flota del rival).
+    Recibe: la flota y una semilla (misma semilla -> misma celda).
+    Devuelve: un punto (z, x, y), o None si no quedan celdas sin destruir.
+    """
+    candidatas = sorted(p for nave in flota for p in nave["celdas"]
+                        if p not in nave["impactos"])
+    if len(candidatas) == 0:
+        return None
+    return random.Random(semilla).choice(candidatas)
+
+
 if __name__ == "__main__":
-    # Demo: ubicacion automatica en N=8 y validacion de la flota resultante.
+    #Demo:
     from tablero import crear_cubo
     cubo = crear_cubo(8)
     flota = ubicacion_automatica(cubo, CATALOGO, semilla=42)
