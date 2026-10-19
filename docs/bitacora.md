@@ -10,3 +10,14 @@
 | armamento.py | Juan Ignacio Chedufau Moleon             |
 | registro.py  | Bisanzio Geronimo           |
 | partida.py   | Rafael Lepage |
+
+## Entrega 2 (19/10)
+
+| Módulo       | Integrante(s)                |
+| ------------ | ---------------------------- |
+| tablero.py   | Austin Zacarias Stelli       |
+| flota.py     | (a completar)                |
+| radar.py     | Rafael Lepage                |
+| armamento.py | Juan Ignacio Chedufau Moleon |
+| registro.py  | Bisanzio Geronimo            |
+| partida.py   | (a completar)                |
