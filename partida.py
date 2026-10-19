@@ -133,7 +133,7 @@ def aplicar_disparo(cubo, naves, letra_arma, punto):
     Devuelve: la cantidad de celdas con nave alcanzadas (int).
     Lanza: KeyError si la letra no está en el catálogo de armas.
     """
-    funcion = armamento.catalogo_armas[letra_arma]["funcion"]
+    funcion = armamento.CATALOGO_ARMAS[letra_arma]["funcion"]
     celdas = funcion(cubo, punto)
 
     impactos = 0

@@ -54,6 +54,37 @@ def test_lineas_del_cubo():
     assert lineas[-1] == partida.REFERENCIAS
 
 
+def test_aplicar_disparo_marca_impacto_y_agua():
+    jugador = partida.nueva_partida_1v1()["jugadores"][0]
+    cubo = jugador["cubo"]
+    naves = jugador["flota"]
+    flota.ubicar_nave(cubo, naves, "F", (3, 5, 4), (3, 5, 5))
+
+    assert partida.aplicar_disparo(cubo, naves, "T", (3, 5, 4)) == 1
+    assert tablero.leer_celda(cubo, 3, 5, 4) == tablero.IMPACTO
+    assert naves[0]["impactos"] == {(3, 5, 4)}
+
+    assert partida.aplicar_disparo(cubo, naves, "T", (1, 1, 1)) == 0
+    assert tablero.leer_celda(cubo, 1, 1, 1) == tablero.AGUA_MARCADA
+
+
+def test_aplicar_disparo_repetido_no_cuenta_dos_veces():
+    jugador = partida.nueva_partida_1v1()["jugadores"][0]
+    cubo = jugador["cubo"]
+    naves = jugador["flota"]
+    flota.ubicar_nave(cubo, naves, "F", (3, 5, 4), (3, 5, 5))
+    partida.aplicar_disparo(cubo, naves, "T", (3, 5, 4))
+    assert partida.aplicar_disparo(cubo, naves, "T", (3, 5, 4)) == 0
+    assert tablero.leer_celda(cubo, 3, 5, 4) == tablero.IMPACTO
+    assert naves[0]["impactos"] == {(3, 5, 4)}
+
+
+def test_aplicar_disparo_con_arma_inexistente():
+    jugador = partida.nueva_partida_1v1()["jugadores"][0]
+    with pytest.raises(KeyError):
+        partida.aplicar_disparo(jugador["cubo"], jugador["flota"], "Z", (1, 1, 1))
+
+
 def test_pedir_dato_insiste_hasta_que_el_dato_es_valido(monkeypatch, capsys):
     responder(monkeypatch, ["", "9", "hola", " 3 "])
     assert partida.pedir_dato("Opcion: ", partida.PATRON_OPCION_PRINCIPAL) == "3"
