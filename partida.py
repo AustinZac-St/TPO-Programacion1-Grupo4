@@ -170,8 +170,44 @@ def aplicar_disparo(cubo, naves, letra_arma, punto):
     return impactos
 
 
+def ejecutar_turno(estado, jugada):
+   """
+    Ejecuta un turno de la partida: aplica el disparo del jugador al rival,
+    Recibe: el estado de la partida y la jugada (dict con "arma", "objetivo" y "eje")
+    Devueleve: el estado modificado de la partida.
+    Lanza: ArmaNoDisponible si el arma no existe o todavía no tiene
+    función, ObjetivoInvalido si el punto está fuera del cubo 
+   """
+   jugador = estado["jugadores"][estado["turno"]]
+   rival = estado["jugadores"][1-estado["turno"]]
+   letra = jugada["arma"]
+   objetivo = jugada["objetivo"]
+   eje = jugada.get("eje")
+
+   if letra not in armamento.CATALOGO_ARMAS:
+        raise ArmaNoDisponible("El arma " + str(letra) + " no existe.")
+   funcion = armamento.CATALOGO_ARMAS[letra]["funcion"]
+   if funcion is None:
+        raise ArmaNoDisponible("Esa arma todavia no esta disponible.")
+
+   if not tablero.punto_dentro_del_cubo(rival["cubo"], *objetivo):
+        raise ObjetivoInvalido("El objetivo esta fuera del cubo.")
+   
+   try:
+        celdas = funcion(rival["cubo"], objetivo, eje)
+   except ValueError:
+        raise ObjetivoInvalido("El eje elegido no es valido para esa arma.")
+   
+   armamento.consumir_municion(jugador["municion"], letra)
+   resultados = flota.disparar_celdas(rival["cubo"], rival["flota"], celdas, letra)
+   resumen = flota.resumen_disparo(resultados)
+   estado["ultimo_resumen"] = resumen
+   registro.registrar_jugada(estado["historial"], jugador["nombre"], letra, objetivo, resumen["impactos"], resumen["aguas"], 0, resumen["hundidas"])
+   estado["turno"] = 1 - estado["turno"]
+   return estado
+
 # --------------------------------------------------------------------------
-# Entrada y salida
+# Entrada y salidaS
 # --------------------------------------------------------------------------
 
 def pedir_dato(mensaje, patron):
