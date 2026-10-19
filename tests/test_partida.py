@@ -28,6 +28,14 @@ def test_nueva_partida_1v1_con_configuracion():
         partida.nueva_partida_1v1({"nombres": ("Ana", "Ana")})
 
 
+def test_nueva_partida_1v1_municion_a_cada_jugador():
+    estado = partida.nueva_partida_1v1()
+    municion_1 = estado["jugadores"][0]["municion"]
+    municion_2 = estado["jugadores"][1]["municion"]
+    assert municion_1 is not municion_2
+    assert municion_1["T"] is None
+    assert municion_1["R"] == 3
+
 def test_texto_a_tramo():
     assert partida.texto_a_tramo("3,4,2-3,4,7") == ((3, 4, 2), (3, 4, 7))
     assert partida.texto_a_tramo(" 3, 4 ,2 - 3,4,7 ") == ((3, 4, 2), (3, 4, 7))

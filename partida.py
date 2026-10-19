@@ -12,8 +12,8 @@ El estado de una partida es un diccionario:
     {
         "n": 8,
         "jugadores": [
-            {"nombre": "Jugador 1", "cubo": [...], "flota": [...]},
-            {"nombre": "Jugador 2", "cubo": [...], "flota": [...]},
+            {"nombre": "Jugador 1", "cubo": [...], "flota": [...], "municion": {...}},
+            {"nombre": "Jugador 2", "cubo": [...], "flota": [...], "municion": {...}},
         ],
         "turno": 0,                # índice del jugador al que le toca
         "historial": {...},        # creado con registro.crear_historial
@@ -29,6 +29,24 @@ import armamento
 import flota
 import registro
 import tablero
+
+
+class ErrorPartida(Exception):
+    """
+    Excepcion que se lanza cuando hay un error en la partida
+    """
+
+
+class ArmaNoDisponible(ErrorPartida):
+    """
+    Excepcion que se lanza cuando se intenta usar un arma que no está disponible.
+    """
+
+class ObjetivoInvalido(ErrorPartida):
+    """
+    Excepcion que se lanza cuando se intenta disparar a un objetivo
+    que no es válido (fuera del cubo o ya disparado)
+    """
 
 # Expresiones regulares para validar todo lo que se tipea
 PATRON_OPCION_PRINCIPAL = r"^\s*([1-5])\s*$"
@@ -72,6 +90,7 @@ def nueva_partida_1v1(configuracion=None):
             "nombre": nombre,
             "cubo": tablero.crear_cubo(n),
             "flota": [],
+            "municion":armamento.crear_municion(),
         })
     return {
         "n": n,
