@@ -23,6 +23,7 @@ Las opciones de los menús se despachan con diccionarios que asocian
 la opción tipeada con una función, sin cadenas de if / elif.
 """
 
+import random
 import re
 
 import armamento
@@ -198,6 +199,69 @@ def hay_ganador(estado):
     return None
 
 
+def nueva_partida_vs_maquina(configuracion=None, dificultad=1):
+    """
+    Crea el estado inicial de una partida contra la máquina (FUNCION PUBLICA).
+    El jugador 2 es la máquina y se marca con "es_maquina".
+    Recibe: configuracion (dict o None, igual que en nueva_partida_1v1) y
+    dificultad (int, por ahora hay un solo nivel: la máquina juega al azar).
+    Devuelve: el estado inicial de la partida (dict).
+    Lanza: ValueError si los nombres no son válidos o son iguales.
+    """
+    if configuracion is None:
+        configuracion = {}
+    nombres = configuracion.get("nombres", ("Jugador 1", "Maquina"))
+    estado = nueva_partida_1v1({"n": configuracion.get("n", tablero.N_POR_DEFECTO),
+                                "nombres": nombres})
+    estado["jugadores"][1]["es_maquina"] = True
+    estado["dificultad"] = dificultad
+    return estado
+
+
+def elegir_jugada_maquina(estado):
+    """
+    Elige de forma random la jugada de la máquina: un arma que tenga función y
+    munición, y una celda del cubo del rival que todavía no se haya disparado.
+    Recibe: estado (dict de la partida).
+    Devuelve: la jugada (dict con "arma", "objetivo" y "eje").
+    """
+    jugador = estado["jugadores"][estado["turno"]]
+    rival = estado["jugadores"][1 - estado["turno"]]
+
+    armas = []
+    for letra, datos in armamento.CATALOGO_ARMAS.items():
+        if datos["funcion"] is not None and armamento.tiene_municion(jugador["municion"], letra):
+            armas.append(letra)
+    letra = random.choice(armas)
+
+    celdas = []
+    for z in range(1, estado["n"] + 1):
+        for x in range(1, estado["n"] + 1):
+            for y in range(1, estado["n"] + 1):
+                contenido = tablero.leer_celda(rival["cubo"], z, x, y)
+                if contenido == tablero.SIN_EXPLORAR or contenido == tablero.NAVE_OCULTA:
+                    celdas.append((z, x, y))
+    objetivo = random.choice(celdas)
+
+    eje = None
+    if letra == "L":
+        eje = random.choice(["x", "y"])
+    return {"arma": letra, "objetivo": objetivo, "eje": eje}
+
+
+def turno_maquina(estado):
+    """
+    Juega el turno de la máquina: elige una jugada al azar y la ejecuta.
+    Recibe: estado (dict de la partida).
+    Devuelve: la jugada que hizo la máquina (dict).
+    Lanza: ArmaNoDisponible si el arma no existe o todavía no tiene
+    función, ObjetivoInvalido si el punto está fuera del cubo.
+    """
+    jugada = elegir_jugada_maquina(estado)
+    ejecutar_turno(estado, jugada)
+    return jugada
+
+
 # --------------------------------------------------------------------------
 # Entrada y salidaS
 # --------------------------------------------------------------------------
@@ -331,6 +395,21 @@ def turno_de_jugador(estado):
         jugado = OPCIONES_TURNO[opcion](estado)
 
 
+def turno_de_maquina(estado):
+    """
+    Juega el turno de la máquina y muestra qué hizo.
+    Recibe: estado (dict de la partida).
+    Devuelve: nada. El estado queda con el turno cambiado.
+    """
+    jugador = estado["jugadores"][estado["turno"]]
+    print()
+    print("=== Turno de " + jugador["nombre"] + " ===")
+    jugada = turno_maquina(estado)
+    nombre_arma = armamento.CATALOGO_ARMAS[jugada["arma"]]["nombre"]
+    print(jugador["nombre"] + " dispara " + nombre_arma + " a " + str(jugada["objetivo"]))
+    mostrar_resultado(estado["ultimo_resumen"])
+
+
 def jugar_partida(estado):
     """
     Repite los turnos uno por jugador hasta que alguien hunda toda la
@@ -340,7 +419,11 @@ def jugar_partida(estado):
     """
     ganador = hay_ganador(estado)
     while ganador is None:
-        turno_de_jugador(estado)
+        jugador = estado["jugadores"][estado["turno"]]
+        if jugador.get("es_maquina", False):
+            turno_de_maquina(estado)
+        else:
+            turno_de_jugador(estado)
         ganador = hay_ganador(estado)
     registro.finalizar_historial(estado["historial"], ganador)
     print()
@@ -474,6 +557,21 @@ def partida_uno_contra_uno():
     return False
 
 
+def partida_uno_contra_la_maquina():
+    """
+    Crea una partida contra la máquina: el jugador ubica su flota y la de
+    la máquina se ubica sola.
+    Devuelve: False, para que el menú principal se vuelva a mostrar.
+    """
+    estado = nueva_partida_vs_maquina()
+    submenu_ubicacion(estado["jugadores"][0])
+    ubicacion_automatica(estado["jugadores"][1])
+    print()
+    print("Las dos flotas estan ubicadas. Empieza la partida.")
+    jugar_partida(estado)
+    return False
+
+
 def opcion_no_disponible():
     """
     Avisa que la opción elegida corresponde a una entrega posterior.
@@ -493,7 +591,7 @@ def salir():
 
 OPCIONES_PRINCIPAL = {
     "1": partida_uno_contra_uno,
-    "2": opcion_no_disponible,
+    "2": partida_uno_contra_la_maquina,
     "3": opcion_no_disponible,
     "4": opcion_no_disponible,
     "5": salir,

@@ -178,7 +178,7 @@ def test_continuar_exige_la_flota_completa(capsys):
 def test_programa_completo_de_punta_a_punta(monkeypatch, capsys):
     monkeypatch.setattr(partida, "jugar_partida", lambda estado: None)
     responder(monkeypatch, [
-        "7", "2",               # opcion invalida y opcion aun no disponible
+        "7", "3",               # opcion invalida y opcion aun no disponible
         "1",                    # partida uno contra uno
         "4",                    # Jugador 1 quiere continuar sin flota
         "2", "3", "99", "4",    # automatica, ver capa 99 (invalida) y capa 4
@@ -293,3 +293,65 @@ def test_jugar_partida_termina_cuando_hay_ganador(monkeypatch, capsys):
     assert ganador == "Jugador 1"
     assert estado["historial"]["ganador"] == "Jugador 1"
     assert "Gano Jugador 1" in capsys.readouterr().out
+
+
+def partida_vs_maquina_lista():
+    estado = partida.nueva_partida_vs_maquina()
+    for jugador in estado["jugadores"]:
+        partida.ubicacion_automatica(jugador)
+    return estado
+
+
+def test_nueva_partida_vs_maquina():
+    estado = partida.nueva_partida_vs_maquina()
+    assert estado["jugadores"][0]["nombre"] == "Jugador 1"
+    assert estado["jugadores"][1]["nombre"] == "Maquina"
+    assert estado["jugadores"][1]["es_maquina"] is True
+    assert "es_maquina" not in estado["jugadores"][0]
+    assert estado["jugadores"][1]["municion"]["R"] == 3
+    assert estado["turno"] == 0
+
+
+def test_elegir_jugada_maquina_siempre_es_valida_y_no_repite_celdas():
+    estado = partida_vs_maquina_lista()
+    estado["turno"] = 1
+    rival = estado["jugadores"][0]
+    for vuelta in range(60):
+        jugada = partida.elegir_jugada_maquina(estado)
+        assert armamento.CATALOGO_ARMAS[jugada["arma"]]["funcion"] is not None
+        assert tablero.punto_dentro_del_cubo(rival["cubo"], *jugada["objetivo"])
+        contenido = tablero.leer_celda(rival["cubo"], *jugada["objetivo"])
+        assert contenido in (tablero.SIN_EXPLORAR, tablero.NAVE_OCULTA)
+        if jugada["arma"] == "L":
+            assert jugada["eje"] in ("x", "y")
+        else:
+            assert jugada["eje"] is None
+        partida.ejecutar_turno(estado, jugada)
+        estado["turno"] = 1
+
+
+def test_turno_maquina_dispara_y_pasa_el_turno():
+    estado = partida_vs_maquina_lista()
+    estado["turno"] = 1
+    jugada = partida.turno_maquina(estado)
+    assert estado["turno"] == 0
+    assert len(estado["historial"]["jugadas"]) == 1
+    assert estado["historial"]["jugadas"][0]["jugador"] == "Maquina"
+    assert jugada["arma"] in armamento.CATALOGO_ARMAS
+
+
+def test_jugar_partida_contra_la_maquina(monkeypatch, capsys):
+    estado = partida_vs_maquina_lista()
+    rival = estado["jugadores"][1]
+    respuestas = []
+    for nave in rival["flota"]:
+        for (z, x, y) in sorted(nave["celdas"]):
+            punto = str(z) + "," + str(x) + "," + str(y)
+            respuestas.extend(["1", "t", punto])
+            respuestas.extend(["1", "t", punto])   # el portaaviones aguanta 2 impactos por celda
+    responder(monkeypatch, respuestas)
+    ganador = partida.jugar_partida(estado)
+    salida = capsys.readouterr().out
+    assert ganador == "Jugador 1"
+    assert "=== Turno de Maquina ===" in salida
+    assert "Maquina dispara" in salida
