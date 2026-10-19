@@ -73,6 +73,21 @@ def test_ejecutar_turno_sin_municion():
     assert estado["turno"] == 0
 
 
+def test_hay_ganador_sin_ganador_y_con_ganador():
+    estado = partida.nueva_partida_1v1()
+    for jugador in estado["jugadores"]:
+        partida.ubicacion_automatica(jugador)
+    assert partida.hay_ganador(estado) is None
+    for nave in estado["jugadores"][1]["flota"]:
+        nave["impactos"] = set(nave["celdas"])
+    assert partida.hay_ganador(estado) == "Jugador 1"
+
+
+def test_hay_ganador_sin_flotas_ubicadas():
+    estado = partida.nueva_partida_1v1()
+    assert partida.hay_ganador(estado) is None
+
+
 def test_texto_a_tramo():
     assert partida.texto_a_tramo("3,4,2-3,4,7") == ((3, 4, 2), (3, 4, 7))
     assert partida.texto_a_tramo(" 3, 4 ,2 - 3,4,7 ") == ((3, 4, 2), (3, 4, 7))

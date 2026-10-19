@@ -206,6 +206,21 @@ def ejecutar_turno(estado, jugada):
    estado["turno"] = 1 - estado["turno"]
    return estado
 
+
+
+def hay_ganador(estado):
+    """
+    Indica si algún jugador ya hundió toda la flota del rival.
+    Recibe: el estado de la partida (dict).
+    Devuelve: el  jugador que gano, o None si no hay ganador.
+    """
+    for indice in range(2):
+        rival = estado["jugadores"][1-indice]
+        if flota.flota_hundida(rival["flota"]):
+            return estado["jugadores"][indice]["nombre"]
+    return None
+
+
 # --------------------------------------------------------------------------
 # Entrada y salidaS
 # --------------------------------------------------------------------------
