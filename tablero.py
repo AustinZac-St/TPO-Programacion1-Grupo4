@@ -2,7 +2,7 @@
 tablero.py - Módulo del cubo (Entrega 1, 2 y 3).
 
 Responsabilidad: crear el cubo, validar puntos, leer y escribir celdas,
-operaciones de matrices y dibujo de una capa de z.
+operaciones de matrices dibujo de capas y planos, y recorridos del cubo.
 
 El cubo es una lista de listas de listas: cubo[z][x][y].
 Los ejes que ve el usuario van de 1 a N, pero las listas de Python
@@ -374,3 +374,57 @@ def recorrido_por_capas_y(cubo):
             for x in range(1, n + 1): 
                 puntos.append((z, x, y))
     return puntos
+
+
+def dividir_rango(inicio, fin):
+    """
+    Divide un rango de valores en dos mitades. Si el rango tiene un solo
+    valor no se puede dividir y se devuelve entero.
+    Recibe: inicio y fin (int), los extremos del rango (incluidos).
+    Devuelve: lista con uno o dos rangos, cada uno una tupla (inicio, fin).
+
+    """
+    if inicio == fin:
+        return [(inicio, fin)]
+    medio = (inicio + fin) // 2
+    return [(inicio, medio), (medio + 1, fin)]
+
+
+def visitar_bloque(rango_z, rango_x, rango_y, puntos):
+    """
+    Función recursiva auxiliar de recorrido_por_octantes.
+    Caso base: el bloque es una sola celda, se agrega a la lista.
+    Caso recursivo: se divide el bloque en sus octantes (hasta 8 bloques
+    más chicos) y se visita cada uno.
+    Recibe: los rangos (inicio, fin) de z, x e y, y la lista donde se
+    van agregando los puntos visitados.
+    Devuelve: nada (modifica la lista recibida) 
+    
+    """
+    z_ini, z_fin = rango_z
+    x_ini, x_fin = rango_x
+    y_ini, y_fin = rango_y
+    if z_ini == z_fin and x_ini == x_fin and y_ini == y_fin:
+        puntos.append((z_ini, x_ini, y_ini))
+        return
+    for mitad_z in dividir_rango(z_ini, z_fin):
+        for mitad_x in dividir_rango(x_ini, x_fin):
+            for mitad_y in dividir_rango(y_ini, y_fin):
+                visitar_bloque(mitad_z, mitad_x, mitad_y, puntos)
+
+
+def recorrido_por_octantes(cubo):
+    """
+    Recorrido recursivo: divide el cubo en 8 octantes, cada octante en 8
+    más chicos, y así hasta llegar a celdas sueltas.
+    Funciona con cualquier N (si N es impar, las mitades quedan desiguales).
+    No imprime nada: devuelve los puntos en el orden en que se visitan.
+    Recibe: el cubo . 
+    Devuelve: lista de tuplas (z, x, y) con las n * n * n celdas.
+    """
+    n = len(cubo)
+    puntos = []
+    visitar_bloque((1, n), (1, n), (1, n), puntos)
+    return puntos
+
+

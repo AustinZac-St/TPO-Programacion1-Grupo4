@@ -5,7 +5,7 @@ from tablero import contar_celdas_en_estado, simbolo_de_estado, completar_ancho
 from tablero import AGUA_MARCADA, IMPACTO, HUNDIDO, DETECTADO_SONAR
 from tablero import obtener_capa_z,obtener_plano_x, obtener_plano_y,dibujar_capa_z, dibujar_plano_x, dibujar_plano_y
 from tablero import recorrido_por_capas_z, recorrido_por_capas_x, recorrido_por_capas_y
-
+from tablero import recorrido_por_octantes
 
 def test_crear_cubo_tiene_tamano_correcto():
     cubo = crear_cubo(3)
@@ -173,7 +173,28 @@ def test_recorrido_por_capas_y():
     puntos = recorrido_por_capas_y(cubo)
     assert len(puntos) == 27
     assert puntos[0] == (1, 1, 1)
-    assert puntos[1] == (2, 1, 1)
-    assert puntos[3] == (1, 2, 1) 
+    assert puntos[1] == (1, 2, 1) 
+    assert puntos[3] == (2, 1, 1)  
     assert puntos[9] == (1, 1, 2) 
     assert puntos[26] == (3, 3, 3)
+
+
+def test_recorrido_por_octantes_visita_todo_una_vez():
+    for n in [1, 2, 3, 4, 5, 8]:
+        cubo = crear_cubo(n)
+        puntos = recorrido_por_octantes(cubo)
+        assert len(puntos) == n * n * n
+        assert len(set(puntos)) == n * n * n
+
+
+def test_recorrido_por_octantes_orden():
+    cubo = crear_cubo(2)
+    puntos = recorrido_por_octantes(cubo)
+    assert puntos[0] == (1, 1, 1)
+    assert puntos[1] == (1, 1, 2)
+    assert puntos[7] == (2, 2, 2)
+    cubo = crear_cubo(4)
+    puntos = recorrido_por_octantes(cubo)
+    primeros = set(puntos[0:8])
+    for punto in primeros:
+        assert punto[0] <= 2 and punto[1] <= 2 and punto[2] <= 2
