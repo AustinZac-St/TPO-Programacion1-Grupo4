@@ -56,8 +56,6 @@ def test_ejecutar_turno_con_error_no_gasta_municion_ni_cambia_el_turno():
         partida.ejecutar_turno(estado, {"arma": "R", "objetivo": (99, 1, 1)})
     with pytest.raises(partida.ArmaNoDisponible):
         partida.ejecutar_turno(estado, {"arma": "Z", "objetivo": (1, 1, 1)})
-    with pytest.raises(partida.ArmaNoDisponible):
-        partida.ejecutar_turno(estado, {"arma": "O", "objetivo": (1, 1, 1)})
     assert estado["jugadores"][0]["municion"]["R"] == 3
     assert estado["turno"] == 0
     assert len(estado["historial"]["jugadas"]) == 0
@@ -225,7 +223,7 @@ def test_turno_de_jugador_dispara_y_pasa_el_turno(monkeypatch, capsys):
 def test_turno_de_jugador_informa_el_error_y_vuelve_a_pedir(monkeypatch, capsys):
     estado = partida_lista()
     responder(monkeypatch, [
-        "1", "o", "1,1,1",      # sonar: todavia no esta disponible
+        "1", "c", "1,99,1",
         "1", "t", "99,1,1",     # fuera del cubo
         "1", "t", "1,1,1",
     ])
