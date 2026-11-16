@@ -21,3 +21,14 @@
 | armamento.py | Juan Ignacio Chedufau Moleon |
 | registro.py  | Bisanzio Geronimo            |
 | partida.py   | Austin Zacarias Stelli       |
+
+## Entrega 3 (DD/MM)
+
+| Módulo       | Integrante(s)                |
+| ------------ | ---------------------------- |
+| tablero.py   | Austin Zacarias Stelli       |
+| flota.py     | COMPLETAR                    |
+| radar.py     | Juan Ignacio Chedufau Moleon |
+| armamento.py | Juan Ignacio Chedufau Moleon |
+| registro.py  | COMPLETAR                    |
+| partida.py   | COMPLETAR                    |

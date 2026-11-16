@@ -84,6 +84,54 @@ def arma_barrido_laser(cubo, punto, eje=None):
         raise ValueError("El barrido laser va sobre el eje x o el eje y.")
     return _recta(cubo, punto, eje)
 
+def arma_onda_expansiva(cubo, punto, eje=None):
+    """
+    Calcula las celdas que afecta una onda expansiva: la celda apuntada y
+    todas las que la rodean, diagonales incluidas (un bloque de 3x3x3).
+    En un borde o una esquina son menos, porque las vecinas que caerían
+    fuera del cubo no se cuentan.
+    Recibe: el cubo, punto (z, x, y) y eje (no lo usa).
+    Devuelve: lista de hasta 27 celdas, la apuntada primero.
+    """
+    return [punto] + tablero.vecinos_de_celda(cubo, *punto)
+
+
+def _distancia(punto_a, punto_b):
+    """
+    Distancia entre dos puntos contando pasos por los ejes: la suma de las
+    diferencias en z, en x y en y. Sirve para elegir la vecina más cercana.
+    """
+    return sum(abs(a - b) for a, b in zip(punto_a, punto_b))
+
+
+def arma_torpedo_guiado(cubo, punto, eje=None):
+    """
+    Calcula la celda que afecta un torpedo guiado. Si en la celda apuntada
+    hay una nave, va ahí. Si no, corrige el rumbo hacia la nave más cercana
+    entre las celdas que rodean al punto (diagonales incluidas). Si
+    alrededor no hay ninguna nave, cae en la celda apuntada.
+    A diferencia de las otras armas, mira el estado de las celdas, pero
+    tampoco modifica el cubo.
+    Recibe: el cubo, punto (z, x, y) y eje (no lo usa).
+    Devuelve: lista con una sola celda [(z, x, y)].
+    """
+    if _hay_nave(cubo, punto):
+        return [punto]
+    candidatas = [v for v in tablero.vecinos_de_celda(cubo, *punto)
+                  if _hay_nave(cubo, v)]
+    if len(candidatas) == 0:
+        return [punto]
+    return [min(candidatas, key=lambda v: _distancia(punto, v))]
+
+
+def _hay_nave(cubo, punto):
+    """
+    Indica si en una celda hay una nave que todavía se puede impactar:
+    oculta o ya detectada por el sonar.
+    """
+    estado = tablero.leer_celda(cubo, *punto)
+    return estado in (tablero.NAVE_OCULTA, tablero.DETECTADO_SONAR)
+
 CATALOGO_ARMAS = {
     "T": {
         "nombre": "Torpedo",
@@ -113,12 +161,12 @@ CATALOGO_ARMAS = {
     "O": {
         "nombre": "Onda expansiva",
         "municion_inicial": 1,
-        "funcion": None,               # Entrega 3
+        "funcion": arma_onda_expansiva,               
     },
     "G": {
         "nombre": "Torpedo guiado",
         "municion_inicial": 1,
-        "funcion": None,               # Entrega 3
+        "funcion": arma_torpedo_guiado,               
     },
 }
 
