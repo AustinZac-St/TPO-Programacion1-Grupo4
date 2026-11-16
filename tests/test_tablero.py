@@ -6,6 +6,7 @@ from tablero import AGUA_MARCADA, IMPACTO, HUNDIDO, DETECTADO_SONAR
 from tablero import obtener_capa_z,obtener_plano_x, obtener_plano_y,dibujar_capa_z, dibujar_plano_x, dibujar_plano_y
 from tablero import recorrido_por_capas_z, recorrido_por_capas_x, recorrido_por_capas_y
 from tablero import recorrido_por_octantes
+from tablero import propagar,  recorrido_por_propagacion
 
 def test_crear_cubo_tiene_tamano_correcto():
     cubo = crear_cubo(3)
@@ -198,3 +199,53 @@ def test_recorrido_por_octantes_orden():
     primeros = set(puntos[0:8])
     for punto in primeros:
         assert punto[0] <= 2 and punto[1] <= 2 and punto[2] <= 2
+
+
+def test_propagacion_origen_incluido():
+    cubo = crear_cubo(4)
+    puntos = recorrido_por_propagacion(cubo, 2, 3, 1)
+    assert puntos[0] == (2, 3, 1)
+
+
+def test_propagacion_radio_cero():
+    cubo = crear_cubo(4)
+    puntos = recorrido_por_propagacion(cubo, 1, 1, 1, radio=0)
+    assert puntos == [(1, 1, 1)]
+
+
+def test_propagacion_radio_uno():
+    cubo = crear_cubo(4)
+    puntos = recorrido_por_propagacion(cubo, 2, 2, 2, radio=1)
+    assert puntos[0] == (2, 2, 2)
+    assert len(puntos) == 27
+
+
+def test_propagacion_sin_repetidos():
+    cubo = crear_cubo(4)
+    puntos = recorrido_por_propagacion(cubo, 1, 1, 1)
+    assert len(puntos) == len(set(puntos))
+
+
+def test_propagacion_visita_todo_el_cubo():
+    for n in [2, 3, 4, 5]:
+        cubo = crear_cubo(n)
+        puntos = recorrido_por_propagacion(cubo, 1, 1, 1)
+        assert len(puntos) == n * n * n
+
+
+def test_propagacion_origen_fuera_lanza_error():
+    cubo = crear_cubo(4)
+    error_lanzado = False
+    try:
+        recorrido_por_propagacion(cubo, 0, 0, 0)
+    except ValueError:
+        error_lanzado = True
+    assert error_lanzado
+
+
+def test_propagacion_esquina_radio_uno():
+    cubo = crear_cubo(4)
+    puntos = recorrido_por_propagacion(cubo, 1, 1, 1, radio=1)
+    assert puntos[0] == (1, 1, 1)
+    assert len(puntos) == 8
+

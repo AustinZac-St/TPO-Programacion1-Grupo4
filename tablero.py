@@ -428,3 +428,29 @@ def recorrido_por_octantes(cubo):
     return puntos
 
 
+def propagar(cubo, frontera, visitados, puntos, radio):
+    if radio == 0 or len(frontera) == 0:
+        return
+    nueva_frontera = [] 
+    for punto in frontera:  
+        for vecino in vecinos_de_celda(cubo, punto[0], punto[1], punto[2]):
+            if vecino  not in visitados:
+                visitados.add(vecino) 
+                puntos.append(vecino)
+                nueva_frontera.append(vecino)
+    propagar(cubo, nueva_frontera, visitados, puntos, radio - 1)
+
+
+def recorrido_por_propagacion(cubo, z, x, y, radio=None): 
+    if not punto_dentro_del_cubo(cubo, z, x, y):  
+        raise ValueError("El punto de origen está fuera del cubo.")
+    if radio is None:
+        radio = len(cubo) - 1 
+    origen = (z, x, y)
+    puntos = [origen]
+    visitados = {origen}
+    propagar(cubo, [origen], visitados, puntos, radio)
+    return puntos
+
+
+
