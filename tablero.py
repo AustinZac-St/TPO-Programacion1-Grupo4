@@ -1,5 +1,5 @@
 """
-tablero.py - Módulo del cubo (Entrega 1 y 2).
+tablero.py - Módulo del cubo (Entrega 1, 2 y 3).
 
 Responsabilidad: crear el cubo, validar puntos, leer y escribir celdas,
 operaciones de matrices y dibujo de una capa de z.
@@ -323,3 +323,54 @@ def vecinos_de_celda(cubo, z, x, y):
                       vecinos.append((vecino_z, vecino_x, vecino_y))
 
     return vecinos
+
+
+def recorrido_por_capas_z(cubo):
+    """
+    Recorrido iterativo: visita el cubo capa por capa, empezando por z = 1. 
+    Dentro de cada capa recorre x y, para cada x, todos los y.
+    No imprime nada: devuelve los puntos en el orden en que se visitan.
+    Recibe: el cubo.
+    Devuelve: lista de tuplas (z, x, y) con las n * n * n celdas.
+    """
+    n = len(cubo)
+    puntos = []
+    for z in range(1, n + 1):
+        for x in range(1, n + 1):
+            for y in range(1, n + 1):  
+                puntos.append((z, x, y))
+    return puntos
+
+
+def recorrido_por_capas_x(cubo): 
+    """
+    Recorrido iterativo: visita el cubo plano por plano de x, empezando por x = 1.
+    Dentro de cada plano recorre z y, para cada z, todos los y.
+    No imprime nada: devuelve los puntos en el orden en que se visitan.
+    Recibe: el cubo.
+    Devuelve: lista de tuplas (z, x, y) con las n * n * n celdas.
+    """
+    n = len(cubo)
+    puntos = []
+    for x in range(1, n + 1): 
+        for z in range(1, n + 1):
+            for y in range(1, n + 1):  
+                puntos.append((z, x, y))
+    return puntos
+
+
+def recorrido_por_capas_y(cubo):
+    """
+    Recorrido iterativo: visita el cubo plano por plano de y, empezando por y = 1.
+    Dentro de cada plano recorre z y, para cada z, todos los x.
+    No imprime nada:  devuelve los puntos en el orden en que se visitan.
+    Recibe: el cubo.
+    Devuelve: lista de tuplas (z, x, y) con las n * n * n celdas.
+    """
+    n = len(cubo)
+    puntos = [] 
+    for y in range(1, n + 1):
+        for z in range(1, n + 1): 
+            for x in range(1, n + 1): 
+                puntos.append((z, x, y))
+    return puntos

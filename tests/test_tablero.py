@@ -4,6 +4,7 @@ from tablero import leer_celda, texto_a_punto, es_texto_de_punto_valido
 from tablero import contar_celdas_en_estado, simbolo_de_estado, completar_ancho
 from tablero import AGUA_MARCADA, IMPACTO, HUNDIDO, DETECTADO_SONAR
 from tablero import obtener_capa_z,obtener_plano_x, obtener_plano_y,dibujar_capa_z, dibujar_plano_x, dibujar_plano_y
+from tablero import recorrido_por_capas_z, recorrido_por_capas_x, recorrido_por_capas_y
 
 
 def test_crear_cubo_tiene_tamano_correcto():
@@ -143,3 +144,36 @@ def test_vecinos_de_celda():
     assert len(vecinos_de_celda(cubo, 1, 1, 1)) == 7
     assert len(vecinos_de_celda(cubo, 1, 2, 2)) == 17
     assert(2, 2, 2) not in vecinos_de_celda(cubo, 2, 2, 2)
+
+
+def test_recorrido_por_capas_z():
+    cubo = crear_cubo(3)
+    puntos = recorrido_por_capas_z(cubo)
+    assert len(puntos) == 27
+    assert puntos[0] == (1, 1, 1)
+    assert puntos[1] == (1, 1, 2)
+    assert puntos[3] == (1, 2, 1)
+    assert puntos[9] == (2, 1, 1)
+    assert puntos[26] == (3, 3, 3)
+
+
+def test_recorrido_por_capas_x():
+    cubo = crear_cubo(3)
+    puntos = recorrido_por_capas_x(cubo)
+    assert len(puntos) == 27
+    assert puntos[0] == (1, 1, 1)
+    assert puntos[1] == (1, 1, 2)
+    assert puntos[3] == (2, 1, 1)
+    assert puntos[9] == (1, 2, 1)
+    assert puntos[26] == (3, 3, 3)
+
+
+def test_recorrido_por_capas_y():
+    cubo = crear_cubo(3)
+    puntos = recorrido_por_capas_y(cubo)
+    assert len(puntos) == 27
+    assert puntos[0] == (1, 1, 1)
+    assert puntos[1] == (2, 1, 1)
+    assert puntos[3] == (1, 2, 1) 
+    assert puntos[9] == (1, 1, 2) 
+    assert puntos[26] == (3, 3, 3)
