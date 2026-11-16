@@ -61,9 +61,11 @@ PATRON_TRAMO = (r"^\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*-"
 PATRON_ARMA = r"^\s*([TRCSLOGtrcslog])\s*$"
 PATRON_OBJETIVO = r"^\s*(\d+\s*,\s*\d+\s*,\s*\d+)\s*$"
 PATRON_EJE = r"^\s*([xyXY])\s*$"
+PATRON_EJE_SONAR = r"^\s*([zxyZXY])\s*$"
 PATRON_OPCION_TURNO = r"^\s*([1-3])\s*$"
 
 NOMBRES_POR_DEFECTO = ("Jugador 1", "Jugador 2")
+EJES = ("z", "x", "y")
 
 REFERENCIAS = ("Referencias:  ~ sin explorar   N nave   o agua   X impacto"
                "   # hundido   ? detectado")
@@ -162,7 +164,8 @@ def ejecutar_turno(estado, jugada):
    letra = jugada["arma"]
    objetivo = jugada["objetivo"]
    eje = jugada.get("eje")
-
+   if letra == "S":
+        return ejecutar_sonar(estado, jugada)
    if letra not in armamento.CATALOGO_ARMAS:
         raise ArmaNoDisponible("El arma " + str(letra) + " no existe.")
    funcion = armamento.CATALOGO_ARMAS[letra]["funcion"]
@@ -185,7 +188,45 @@ def ejecutar_turno(estado, jugada):
    estado["turno"] = 1 - estado["turno"]
    return estado
 
+def ejecutar_sonar(estado, jugada):
+    """
+    Ejecuta un turno de sonar: revela un plano del cubo del rival sin
+    producir daño. El plano se elige con el eje y con la coordenada del
+    objetivo sobre ese eje: objetivo (7, 1, 1) y eje "z" es el plano z = 7.
+    Recibe: el estado de la partida y la jugada (dict con "objetivo" y "eje").
+    Devuelve: el estado modificado de la partida.
+    Lanza: ObjetivoInvalido si el punto está fuera del cubo o el eje no es
+    z, x ni y; armamento.SinMunicion si no queda sonar.
+    """
+    jugador = estado["jugadores"][estado["turno"]]
+    rival = estado["jugadores"][1 - estado["turno"]]
+    objetivo = jugada["objetivo"]
+    eje = str(jugada.get("eje")).lower()
 
+    if not tablero.punto_dentro_del_cubo(rival["cubo"], *objetivo):
+        raise ObjetivoInvalido("El objetivo esta fuera del cubo.")
+    if eje not in EJES:
+        raise ObjetivoInvalido("El sonar necesita un eje: z, x o y.")
+    valor = objetivo[EJES.index(eje)]
+
+    armamento.consumir_municion(jugador["municion"], "S")
+    contactos, metricas = radar.sonar(rival["cubo"], eje, valor)
+
+    mensaje = ("Sonar en el plano " + eje + " = " + str(valor) + ": "
+               + str(len(contactos)) + " contacto(s) en "
+               + str(metricas["comparaciones"]) + " celdas revisadas.")
+    estado["ultimo_resumen"] = {
+        "impactos": 0,
+        "aguas": 0,
+        "hundidas": [],
+        "efectos": [],
+        "mensajes": [mensaje],
+        "detectados": len(contactos),
+    }
+    registro.registrar_jugada(estado["historial"], jugador["nombre"], "S",
+                              objetivo, 0, 0, len(contactos), [])
+    estado["turno"] = 1 - estado["turno"]
+    return estado
 
 def hay_ganador(estado):
     """
@@ -291,6 +332,8 @@ def pedir_jugada():
     eje = None
     if letra == "L":
         eje = pedir_dato("Eje:(x/y): ", PATRON_EJE).lower()
+    elif letra == "S":
+        eje = pedir_dato("Eje del plano:(z/x/y): ", PATRON_EJE_SONAR).lower()
     return {"arma": letra, "objetivo": punto, "eje": eje}
 
 

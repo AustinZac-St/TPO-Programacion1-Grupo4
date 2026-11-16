@@ -57,7 +57,7 @@ def test_ejecutar_turno_con_error_no_gasta_municion_ni_cambia_el_turno():
     with pytest.raises(partida.ArmaNoDisponible):
         partida.ejecutar_turno(estado, {"arma": "Z", "objetivo": (1, 1, 1)})
     with pytest.raises(partida.ArmaNoDisponible):
-        partida.ejecutar_turno(estado, {"arma": "S", "objetivo": (1, 1, 1)})
+        partida.ejecutar_turno(estado, {"arma": "O", "objetivo": (1, 1, 1)})
     assert estado["jugadores"][0]["municion"]["R"] == 3
     assert estado["turno"] == 0
     assert len(estado["historial"]["jugadas"]) == 0
@@ -225,7 +225,7 @@ def test_turno_de_jugador_dispara_y_pasa_el_turno(monkeypatch, capsys):
 def test_turno_de_jugador_informa_el_error_y_vuelve_a_pedir(monkeypatch, capsys):
     estado = partida_lista()
     responder(monkeypatch, [
-        "1", "s", "1,1,1",      # sonar: todavia no esta disponible
+        "1", "o", "1,1,1",      # sonar: todavia no esta disponible
         "1", "t", "99,1,1",     # fuera del cubo
         "1", "t", "1,1,1",
     ])
@@ -356,3 +356,25 @@ def test_jugar_partida_contra_la_maquina(monkeypatch, capsys):
     assert ganador == "Jugador 1"
     assert "=== Turno de Maquina ===" in salida
     assert "Maquina dispara" in salida
+
+
+def test_ejecutar_turno_con_sonar_detecta_sin_danar():
+    estado = partida.nueva_partida_1v1()
+    for jugador in estado["jugadores"]:
+        partida.ubicacion_automatica(jugador)
+    rival = estado["jugadores"][1]
+    punto = sorted(rival["flota"][0]["celdas"])[0]
+
+    partida.ejecutar_turno(estado, {"arma": "S", "objetivo": punto, "eje": "z"})
+
+    assert tablero.leer_celda(rival["cubo"], *punto) == tablero.DETECTADO_SONAR
+    assert rival["flota"][0]["impactos"] == set()
+    assert estado["jugadores"][0]["municion"]["S"] == 3
+    assert estado["turno"] == 1
+    assert estado["historial"]["jugadas"][0]["detectados"] >= 1
+
+
+def test_pedir_jugada_con_sonar_pide_el_eje(monkeypatch):
+    responder(monkeypatch, ["s", "7,1,1", "q", "Z"])
+    jugada = partida.pedir_jugada()
+    assert jugada == {"arma": "S", "objetivo": (7, 1, 1), "eje": "z"}
