@@ -28,6 +28,7 @@ import re
 
 import armamento
 import flota
+import radar
 import registro
 import tablero
 
