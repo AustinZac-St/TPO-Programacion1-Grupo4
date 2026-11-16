@@ -21,3 +21,13 @@
 | armamento.py | Juan Ignacio Chedufau Moleon |
 | registro.py  | Bisanzio Geronimo            |
 | partida.py   | Austin Zacarias Stelli       |
+
+
+| Módulo       | Integrante(s)                |
+| ------------ | ---------------------------- |
+| tablero.py   | Austin Zacarias Stelli       |
+| flota.py     | Bisanzio Geronimo            |
+| radar.py     | Rafael Lepage                |
+| armamento.py | Juan Ignacio Chedufau Moleon |
+| registro.py  | Bisanzio Geronimo            |
+| partida.py   | Austin Zacarias Stelli       |
