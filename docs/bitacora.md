@@ -22,7 +22,7 @@
 | registro.py  | Bisanzio Geronimo            |
 | partida.py   | Austin Zacarias Stelli       |
 
-## Entrega 3 (DD/MM)
+## Entrega 3 (16/11)
 
 | Módulo       | Integrante(s)                |
 | ------------ | ---------------------------- |
