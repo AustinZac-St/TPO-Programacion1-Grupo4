@@ -31,4 +31,4 @@
 | radar.py     | Juan Ignacio Chedufau Moleon |
 | armamento.py | Juan Ignacio Chedufau Moleon |
 | registro.py  | Rafael Lepage                |
-| partida.py   | COMPLETAR                    |
+| partida.py   | Bisanzio Geronimo            |
