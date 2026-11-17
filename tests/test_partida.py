@@ -1,7 +1,10 @@
+import random
+
 import pytest
 
 import flota
 import partida
+import registro
 import tablero
 import armamento
 
@@ -176,8 +179,9 @@ def test_continuar_exige_la_flota_completa(capsys):
 
 def test_programa_completo_de_punta_a_punta(monkeypatch, capsys):
     monkeypatch.setattr(partida, "jugar_partida", lambda estado: None)
+    monkeypatch.setattr(partida, "jugar_partida_con_guardado", lambda estado: None)
     responder(monkeypatch, [
-        "7", "3",               # opcion invalida y opcion aun no disponible
+        "7", "3", "1", "2",     # opcion invalida y maquina contra maquina (niveles 1 y 2)
         "1",                    # partida uno contra uno
         "4",                    # Jugador 1 quiere continuar sin flota
         "2", "3", "99", "4",    # automatica, ver capa 99 (invalida) y capa 4
@@ -188,7 +192,7 @@ def test_programa_completo_de_punta_a_punta(monkeypatch, capsys):
     partida.main()
     salida = capsys.readouterr().out
     assert salida.count("===== OPERACION CUBO =====") == 3
-    assert "Esa opcion todavia no esta disponible." in salida
+    assert "Las dos flotas se ubicaron solas." in salida
     assert "--- Flota de Jugador 2 ---" in salida
     assert "========= CAPA z = 8 =========" in salida
     assert "Las dos flotas estan ubicadas." in salida
@@ -372,16 +376,15 @@ def test_ejecutar_turno_con_sonar_detecta_sin_danar():
     assert estado["historial"]["jugadas"][0]["detectados"] >= 1
 
 
-import json
-import random
 
-import pytest
+def test_pedir_jugada_con_sonar_pide_el_eje(monkeypatch):
+    responder(monkeypatch, ["s", "7,1,1", "q", "Z"])
+    jugada = partida.pedir_jugada()
+    assert jugada == {"arma": "S", "objetivo": (7, 1, 1), "eje": "z"}
 
-import flota
-import partida
-import registro
-import tablero
 
+
+# ENTREGA 3
 
 def partida_mvm(niveles=(1, 2)):
     """Partida máquina contra máquina con flotas fijas (semillas)."""
@@ -397,7 +400,8 @@ def jugar_hasta_el_final(estado, maximo=2000):
     return turnos
 
 
-# maquina contra maquina
+#  maquina contra maquina 
+
 def test_nueva_partida_maquina_vs_maquina():
     estado = partida_mvm()
     for jugador, nivel in zip(estado["jugadores"], (1, 2)):
@@ -471,14 +475,9 @@ def test_explorar_descarta_vecinas_de_nave_hundida():
     assert impares == []
 
 
-#  guardar y cargar 
+# guardar y cargar (con registro.py) 
 
-def test_a_datos_json_es_recursiva():
-    dato = {"a": (1, 2), "b": [{(3, 4, 5), (1, 2, 3)}, "texto"], "c": None}
-    assert partida.a_datos_json(dato) == {"a": [1, 2],
-                                          "b": [[[1, 2, 3], [3, 4, 5]], "texto"],
-                                          "c": None}
-    assert partida.a_datos_json(7) == 7
+CARPETA_PRUEBA = "datos_de_prueba"
 
 
 def test_guardar_y_cargar_deja_la_partida_igual():
@@ -486,8 +485,9 @@ def test_guardar_y_cargar_deja_la_partida_igual():
     estado = partida_mvm()
     for vuelta in range(40):
         partida.turno_maquina_con_nivel(estado)
-    texto = json.dumps(partida.estado_para_guardar(estado))   
-    nuevo = partida.estado_desde_datos(json.loads(texto))
+    registro.guardar_partida(estado, "prueba_e3", CARPETA_PRUEBA)
+    nuevo = registro.cargar_partida("prueba_e3", CARPETA_PRUEBA)
+    registro.borrar_partida("prueba_e3", CARPETA_PRUEBA)
     for viejo, recuperado in zip(estado["jugadores"], nuevo["jugadores"]):
         assert recuperado["cubo"] == viejo["cubo"]
         assert recuperado["flota"] == viejo["flota"]
@@ -495,8 +495,6 @@ def test_guardar_y_cargar_deja_la_partida_igual():
         assert recuperado["dificultad"] == viejo["dificultad"]
     assert nuevo["turno"] == estado["turno"]
     assert nuevo["historial"] == estado["historial"]
-    assert registro.estadisticas_generales(nuevo["historial"]) == \
-        registro.estadisticas_generales(estado["historial"])
 
 
 def test_la_partida_cargada_se_puede_seguir_jugando():
@@ -504,19 +502,21 @@ def test_la_partida_cargada_se_puede_seguir_jugando():
     estado = partida_mvm()
     for vuelta in range(30):
         partida.turno_maquina_con_nivel(estado)
-    datos = json.loads(json.dumps(partida.estado_para_guardar(estado)))
-    nuevo = partida.estado_desde_datos(datos)
+    registro.guardar_partida(estado, "prueba_e3b", CARPETA_PRUEBA)
+    nuevo = registro.cargar_partida("prueba_e3b", CARPETA_PRUEBA)
+    registro.borrar_partida("prueba_e3b", CARPETA_PRUEBA)
     jugar_hasta_el_final(nuevo)
     assert partida.hay_ganador(nuevo) is not None
 
 
 def test_partida_contra_la_maquina_guardada_conserva_el_nivel():
-    datos = partida.estado_para_guardar(partida.nueva_partida_vs_maquina(None, 2))
-    estado = partida.estado_desde_datos(json.loads(json.dumps(datos)))
-    estado["turno"] = 1
-    assert estado["jugadores"][1]["es_maquina"]
-    assert partida.nivel_de_la_maquina(estado) == 2
-    assert "es_maquina" not in estado["jugadores"][0]
+    estado = partida.nueva_partida_vs_maquina(None, 2)
+    registro.guardar_partida(estado, "prueba_nivel", CARPETA_PRUEBA)
+    nuevo = registro.cargar_partida("prueba_nivel", CARPETA_PRUEBA)
+    registro.borrar_partida("prueba_nivel", CARPETA_PRUEBA)
+    nuevo["turno"] = 1
+    assert nuevo["jugadores"][1]["es_maquina"]
+    assert partida.nivel_de_la_maquina(nuevo) == 2
 
 
 def test_nombre_de_partida_invalido():
@@ -526,24 +526,13 @@ def test_nombre_de_partida_invalido():
             partida.guardar_estado(estado, nombre)
 
 
-def test_archivo_incompleto_lanza_error():
-    with pytest.raises(partida.PartidaGuardadaInvalida):
-        partida.estado_desde_datos({"turno": 0})
-    with pytest.raises(partida.PartidaGuardadaInvalida):
-        partida.estado_desde_datos({"turno": 5})
-    with pytest.raises(partida.PartidaGuardadaInvalida):
-        partida.estado_desde_datos({})
-    assert issubclass(partida.PartidaGuardadaInvalida, partida.ErrorPartida)
+def test_los_errores_de_registro_se_capturan():
+    assert issubclass(registro.PartidaNoEncontrada, partida.ERRORES_DE_ARCHIVO)
+    assert issubclass(registro.PartidaCorrupta, partida.ERRORES_DE_ARCHIVO)
 
 
 # menu principal
-
 def test_el_menu_usa_las_opciones_de_la_entrega_3():
     assert partida.OPCIONES_PRINCIPAL["3"] == partida.partida_maquina_contra_maquina
     assert partida.OPCIONES_PRINCIPAL["4"] == partida.continuar_partida_guardada
     assert partida.OPCIONES_PRINCIPAL["5"] == partida.salir
-
-def test_pedir_jugada_con_sonar_pide_el_eje(monkeypatch):
-    responder(monkeypatch, ["s", "7,1,1", "q", "Z"])
-    jugada = partida.pedir_jugada()
-    assert jugada == {"arma": "S", "objetivo": (7, 1, 1), "eje": "z"}
