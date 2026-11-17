@@ -76,6 +76,10 @@ class DisparoInvalido(ErrorFlota):
     """El punto disparado no es valido (formato incorrecto o fuera del cubo)."""
 
 
+class DatosFlotaInvalidos(ErrorFlota):
+    """Los datos guardados de una flota no se pueden reconstruir."""
+
+
 
 # Catalogo. Las restricciones son datos (funciones z_valido), sin if/elif.
 
@@ -619,6 +623,96 @@ def celda_para_revelar(flota, semilla=None):
     if len(candidatas) == 0:
         return None
     return random.Random(semilla).choice(candidatas)
+
+
+
+# Entrega 3: datos de la flota para guardar y reponer la partida
+#
+# JSON no admite conjuntos, tuplas ni claves que no sean texto, asi que cada
+# nave se pasa a listas:
+#   {"id": "P1", "tipo": "P", "celdas": [[6, 2, 3], ...],
+#    "impactos": [[6, 2, 3]], "golpes": [[[6, 2, 4], 1]]}
+
+def _puntos_a_listas(puntos):
+    """Convierte un conjunto de puntos en una lista ordenada de listas."""
+    return [list(punto) for punto in sorted(puntos)]
+
+
+def _lista_a_punto(valor):
+    """Convierte [z, x, y] en (z, x, y). Lanza DatosFlotaInvalidos si no se puede."""
+    if type(valor) not in (list, tuple) or len(valor) != 3:
+        raise DatosFlotaInvalidos(f"{valor} no es un punto (z, x, y).")
+    if not all(type(c) == int and c > 0 for c in valor):
+        raise DatosFlotaInvalidos(f"{valor} no es un punto (z, x, y).")
+    return tuple(valor)
+
+
+def nave_a_datos(nave):
+    """Pasa una nave a un diccionario que se puede guardar en JSON.
+
+    Recibe: una nave de la flota.
+    Devuelve: diccionario con "id", "tipo", "celdas", "impactos" y "golpes",
+              donde los puntos son listas [z, x, y].
+    """
+    golpes = nave.get("golpes", {})
+    return {
+        "id": nave["id"],
+        "tipo": nave["tipo"],
+        "celdas": _puntos_a_listas(nave["celdas"]),
+        "impactos": _puntos_a_listas(nave["impactos"]),
+        "golpes": [[list(punto), golpes[punto]] for punto in sorted(golpes)],
+    }
+
+
+def datos_a_nave(datos, catalogo=CATALOGO):
+    """Reconstruye una nave a partir de lo que devuelve nave_a_datos.
+
+    Recibe: el diccionario de la nave y el catalogo.
+    Devuelve: la nave con sus celdas e impactos como conjuntos de tuplas.
+    Lanza: DatosFlotaInvalidos si falta un dato, el tipo no existe o algun
+           punto no es valido.
+    """
+    try:
+        tipo = datos["tipo"]
+        nave = {
+            "id": str(datos["id"]),
+            "tipo": tipo,
+            "celdas": {_lista_a_punto(p) for p in datos["celdas"]},
+            "impactos": {_lista_a_punto(p) for p in datos["impactos"]},
+            "golpes": {_lista_a_punto(p): cantidad
+                       for p, cantidad in datos.get("golpes", [])},
+        }
+    except (KeyError, TypeError, ValueError) as error:
+        raise DatosFlotaInvalidos(f"Datos de nave incompletos: {error}") from error
+    if tipo not in catalogo:
+        raise DatosFlotaInvalidos(f"La nave {nave['id']} es de un tipo desconocido.")
+    if len(nave["celdas"]) != cantidad_celdas(catalogo[tipo]):
+        raise DatosFlotaInvalidos(f"La nave {nave['id']} no tiene las celdas de su tipo.")
+    if not nave["impactos"] <= nave["celdas"] or not set(nave["golpes"]) <= nave["celdas"]:
+        raise DatosFlotaInvalidos(f"La nave {nave['id']} tiene impactos fuera de sus celdas.")
+    return nave
+
+
+def flota_a_datos(flota):
+    """Pasa la flota completa a una lista que se puede guardar en JSON.
+
+    Recibe: la flota (lista de naves).
+    Devuelve: lista de diccionarios (ver nave_a_datos).
+    """
+    return [nave_a_datos(nave) for nave in flota]
+
+
+def datos_a_flota(datos, catalogo=CATALOGO):
+    """Reconstruye la flota a partir de lo que devuelve flota_a_datos.
+
+    Recibe: la lista de naves guardada y el catalogo.
+    Devuelve: la flota (lista de naves), igual a la que se guardo.
+    Lanza: DatosFlotaInvalidos si los datos no son una lista o alguna nave
+           no es valida.
+    """
+    if type(datos) != list:
+        raise DatosFlotaInvalidos("Los datos de la flota deben ser una lista.")
+    return [datos_a_nave(nave, catalogo) for nave in datos]
 
 
 if __name__ == "__main__":

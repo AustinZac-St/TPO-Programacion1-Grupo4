@@ -8,3 +8,6 @@ __pycache__/
 # Configuración de los editores
 .vscode/
 .idea/
+
+# Partidas guardadas, exportaciones y ranking que genera el juego
+datos/

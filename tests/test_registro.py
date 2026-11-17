@@ -1,5 +1,12 @@
 
 
+import json
+import os
+
+import pytest
+
+import flota
+import partida
 import registro
 
 
@@ -257,3 +264,201 @@ def test_resumen_partida_vacia():
     assert "Mejor punteria: empate" in texto
     assert "Jugada destacada: ninguna" in texto
     assert "Naves hundidas (0): -" in texto
+
+
+# Entrega 3: guardado y carga en JSON
+
+def estado_de_prueba():
+    """Arma una partida a medio jugar: flotas ubicadas, algunos disparos
+    y municion gastada."""
+    estado = partida.nueva_partida_1v1({"nombres": ("Ana", "Beto")})
+    for semilla, jugador in enumerate(estado["jugadores"]):
+        jugador["flota"] = flota.ubicacion_automatica(jugador["cubo"], flota.CATALOGO, semilla)
+    rival = estado["jugadores"][1]
+    objetivo = min(rival["flota"][0]["celdas"])
+    flota.recibir_impacto(rival["cubo"], rival["flota"], objetivo)
+    registro.registrar_jugada(estado["historial"], "Ana", "T", objetivo, impactos=1)
+    registro.registrar_jugada(estado["historial"], "Beto", "R", (1, 1, 1), aguas=7)
+    estado["jugadores"][1]["municion"]["R"] -= 1
+    estado["turno"] = 0
+    return estado
+
+
+def test_guardar_y_cargar_devuelve_el_mismo_estado(tmp_path):
+    estado = estado_de_prueba()
+    registro.guardar_partida(estado, "mi_partida", tmp_path)
+    assert registro.cargar_partida("mi_partida", tmp_path) == estado
+
+
+def test_guardar_escribe_un_json_en_la_carpeta(tmp_path):
+    ruta = registro.guardar_partida(estado_de_prueba(), "p1", tmp_path)
+    assert ruta == os.path.join(tmp_path, "p1.json")
+    with open(ruta, encoding="utf-8") as archivo:
+        assert json.load(archivo)["n"] == 8
+    assert os.listdir(tmp_path) == ["p1.json"]
+
+
+def test_guardar_no_modifica_el_estado(tmp_path):
+    estado = estado_de_prueba()
+    flota_antes = [dict(nave) for nave in estado["jugadores"][0]["flota"]]
+    registro.guardar_partida(estado, "p1", tmp_path)
+    assert estado["jugadores"][0]["flota"] == flota_antes
+    assert type(estado["historial"]["jugadores"]) == tuple
+
+
+def test_guardar_crea_la_carpeta(tmp_path):
+    carpeta = os.path.join(tmp_path, "datos", "partidas")
+    registro.guardar_partida(estado_de_prueba(), "p1", carpeta)
+    assert registro.listar_partidas(carpeta) == ["p1"]
+
+
+def test_guardar_dos_veces_reemplaza(tmp_path):
+    estado = estado_de_prueba()
+    registro.guardar_partida(estado, "p1", tmp_path)
+    estado["turno"] = 1
+    registro.guardar_partida(estado, "p1", tmp_path)
+    assert registro.cargar_partida("p1", tmp_path)["turno"] == 1
+
+
+def test_partida_cargada_sigue_funcionando(tmp_path):
+    registro.guardar_partida(estado_de_prueba(), "p1", tmp_path)
+    estado = registro.cargar_partida("p1", tmp_path)
+    datos = registro.calcular_estadisticas(estado["historial"], "Ana")
+    assert datos["impactos"] == 1
+    rival = estado["jugadores"][1]
+    resultado = flota.recibir_impacto(rival["cubo"], rival["flota"],
+                                      min(rival["flota"][0]["celdas"]))
+    assert resultado["resultado"] == "repetido"
+
+
+@pytest.mark.parametrize("nombre", ["", "../afuera", "con espacio", "a" * 31, "año", None])
+def test_nombre_de_partida_invalido(tmp_path, nombre):
+    with pytest.raises(registro.NombrePartidaInvalido):
+        registro.guardar_partida(estado_de_prueba(), nombre, tmp_path)
+    with pytest.raises(registro.NombrePartidaInvalido):
+        registro.cargar_partida(nombre, tmp_path)
+
+
+def test_las_excepciones_heredan_de_la_base():
+    for clase in (registro.NombrePartidaInvalido, registro.PartidaNoEncontrada,
+                  registro.PartidaCorrupta, registro.ErrorArchivo):
+        assert issubclass(clase, registro.ErrorRegistro)
+
+
+def test_cargar_partida_inexistente(tmp_path):
+    with pytest.raises(registro.PartidaNoEncontrada):
+        registro.cargar_partida("no_existe", tmp_path)
+
+
+@pytest.mark.parametrize("contenido", [
+    "esto no es json",
+    "[1, 2, 3]",
+    '{"n": 8}',
+    '{"n": 8, "turno": 0, "jugadores": [], "historial": '
+    '{"jugadores": ["A", "B"], "jugadas": [], "ganador": null}}',
+])
+def test_cargar_partida_corrupta(tmp_path, contenido):
+    with open(os.path.join(tmp_path, "rota.json"), "w", encoding="utf-8") as archivo:
+        archivo.write(contenido)
+    with pytest.raises(registro.PartidaCorrupta):
+        registro.cargar_partida("rota", tmp_path)
+
+
+def test_cargar_partida_con_flota_rota(tmp_path):
+    registro.guardar_partida(estado_de_prueba(), "p1", tmp_path)
+    ruta = os.path.join(tmp_path, "p1.json")
+    with open(ruta, encoding="utf-8") as archivo:
+        datos = json.load(archivo)
+    datos["jugadores"][0]["flota"][0]["tipo"] = "Z"
+    with open(ruta, "w", encoding="utf-8") as archivo:
+        json.dump(datos, archivo)
+    with pytest.raises(registro.PartidaCorrupta):
+        registro.cargar_partida("p1", tmp_path)
+
+
+def test_guardar_algo_que_no_es_json_no_deja_archivos(tmp_path):
+    estado = estado_de_prueba()
+    estado["extra"] = {1, 2}
+    with pytest.raises(registro.ErrorArchivo):
+        registro.guardar_partida(estado, "p1", tmp_path)
+    assert os.listdir(tmp_path) == []
+
+
+def test_listar_partidas(tmp_path):
+    assert registro.listar_partidas(os.path.join(tmp_path, "no_existe")) == []
+    for nombre in ("beto", "ana"):
+        registro.guardar_partida(estado_de_prueba(), nombre, tmp_path)
+    open(os.path.join(tmp_path, "notas.txt"), "w").close()
+    assert registro.listar_partidas(tmp_path) == ["ana", "beto"]
+
+
+def test_borrar_partida(tmp_path):
+    registro.guardar_partida(estado_de_prueba(), "p1", tmp_path)
+    assert registro.borrar_partida("p1", tmp_path)
+    assert not registro.borrar_partida("p1", tmp_path)
+    assert registro.listar_partidas(tmp_path) == []
+
+
+# Entrega 3: exportacion y ranking
+
+def test_exportar_resumen(tmp_path):
+    historial = historial_de_prueba()
+    ruta = registro.exportar_resumen(historial, "resumen", tmp_path)
+    with open(ruta, encoding="utf-8") as archivo:
+        assert archivo.read().splitlines() == registro.generar_resumen(historial)
+
+
+def test_exportar_historial(tmp_path):
+    historial = historial_de_prueba()
+    ruta = registro.exportar_historial(historial, "historial", tmp_path)
+    with open(ruta, encoding="utf-8") as archivo:
+        assert registro.datos_a_historial(json.load(archivo)) == historial
+
+
+def test_exportar_con_nombre_invalido(tmp_path):
+    with pytest.raises(registro.NombrePartidaInvalido):
+        registro.exportar_resumen(historial_de_prueba(), "../x", tmp_path)
+
+
+def partida_terminada(jugador1, jugador2, ganador):
+    """Arma un historial terminado con una jugada de cada uno."""
+    historial = registro.crear_historial(jugador1, jugador2)
+    registro.registrar_jugada(historial, jugador1, "T", (1, 1, 1), impactos=1)
+    registro.registrar_jugada(historial, jugador2, "T", (2, 2, 2), aguas=1)
+    registro.finalizar_historial(historial, ganador)
+    return historial
+
+
+def test_ranking_vacio(tmp_path):
+    archivo = os.path.join(tmp_path, "ranking.json")
+    assert registro.ranking(archivo) == []
+    assert "Todavia no hay" in registro.texto_ranking([])[-1]
+
+
+def test_registrar_resultado_y_ranking(tmp_path):
+    archivo = os.path.join(tmp_path, "ranking.json")
+    registro.registrar_resultado(partida_terminada("Ana", "Beto", "Ana"), archivo)
+    registro.registrar_resultado(partida_terminada("Ana", "Ciro", "Ciro"), archivo)
+    resultado = registro.registrar_resultado(partida_terminada("Beto", "Ana", "Ana"), archivo)
+    assert resultado["punteria"] == {"Beto": 100.0, "Ana": 0.0}
+
+    filas = registro.ranking(archivo)
+    assert [fila["jugador"] for fila in filas] == ["Ana", "Ciro", "Beto"]
+    assert filas[0] == {"jugador": "Ana", "partidas": 3, "victorias": 2,
+                        "derrotas": 1, "porcentaje": 66.7}
+    lineas = registro.texto_ranking(filas, cantidad=2)
+    assert len(lineas) == 4
+    assert lineas[2].startswith(" 1. Ana")
+
+
+def test_registrar_resultado_sin_ganador(tmp_path):
+    with pytest.raises(registro.ErrorRegistro):
+        registro.registrar_resultado(historial_de_prueba(), os.path.join(tmp_path, "r.json"))
+
+
+def test_ranking_corrupto(tmp_path):
+    archivo = os.path.join(tmp_path, "ranking.json")
+    with open(archivo, "w", encoding="utf-8") as f:
+        f.write('{"no": "es una lista"}')
+    with pytest.raises(registro.PartidaCorrupta):
+        registro.ranking(archivo)

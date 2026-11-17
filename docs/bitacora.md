@@ -27,8 +27,8 @@
 | Módulo       | Integrante(s)                |
 | ------------ | ---------------------------- |
 | tablero.py   | Austin Zacarias Stelli       |
-| flota.py     | COMPLETAR                    |
+| flota.py     | Rafael Lepage                |
 | radar.py     | Juan Ignacio Chedufau Moleon |
 | armamento.py | Juan Ignacio Chedufau Moleon |
-| registro.py  | COMPLETAR                    |
+| registro.py  | Rafael Lepage                |
 | partida.py   | COMPLETAR                    |
