@@ -1,15 +1,49 @@
 
+import json
+import os
 import re
 from functools import reduce
+
+import flota
 
 
 # Constantes
 CANTIDAD_JUGADORES = 2
 
+# Rutas relativas a la carpeta desde donde se ejecuta el juego
+CARPETA_PARTIDAS = os.path.join("datos", "partidas")
+CARPETA_EXPORTACIONES = os.path.join("datos", "exportaciones")
+ARCHIVO_RANKING = os.path.join("datos", "ranking.json")
+EXTENSION_PARTIDA = ".json"
+
 #Expresiones regulares para validar los datos que se reciben
 PATRON_NOMBRE = r"^\w[\w ]{0,19}$"          
 PATRON_ARMA = r"^[A-Z]$"                    
-PATRON_PUNTO = r"^\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*$" 
+PATRON_PUNTO = r"^\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*$"
+PATRON_PARTIDA = r"^[A-Za-z0-9_-]{1,30}$"   # nombre de archivo de una partida
+
+
+
+# Excepciones propias (clase base + subclases)
+
+class ErrorRegistro(Exception):
+    """Clase base de los errores de este modulo."""
+
+
+class NombrePartidaInvalido(ErrorRegistro):
+    """El nombre elegido para la partida no cumple PATRON_PARTIDA."""
+
+
+class PartidaNoEncontrada(ErrorRegistro):
+    """No existe una partida guardada con ese nombre."""
+
+
+class PartidaCorrupta(ErrorRegistro):
+    """El archivo de la partida existe pero no se puede reconstruir."""
+
+
+class ErrorArchivo(ErrorRegistro):
+    """No se pudo leer o escribir un archivo de datos."""
 
 
 
@@ -525,4 +559,395 @@ def generar_resumen(historial):
     else:
         lineas.append(f"Jugada destacada: {describir_jugada(destacada)}")
 
+    return lineas
+
+
+
+# Entrega 3: guardado y carga en JSON
+
+def es_nombre_partida_valido(nombre):
+    """Objetivo: indica si un nombre sirve para guardar una partida.
+    Parametros:
+      nombre: el dato a validar.
+    Retorna:
+      bool: True si es un texto de 1 a 30 letras sin acento, digitos, _ o -;
+      False en caso contrario (asi no puede escaparse de la carpeta)."""
+    return type(nombre) == str and re.match(PATRON_PARTIDA, nombre) is not None
+
+
+def ruta_partida(nombre, carpeta=CARPETA_PARTIDAS):
+    """Objetivo: arma la ruta relativa del archivo de una partida.
+    Parametros:
+      nombre (str): nombre de la partida, sin extension.
+      carpeta (str): carpeta de las partidas.
+    Retorna:
+      str: por ejemplo "datos/partidas/mi_partida.json".
+    Lanza:
+      NombrePartidaInvalido si el nombre no cumple PATRON_PARTIDA."""
+    if not es_nombre_partida_valido(nombre):
+        raise NombrePartidaInvalido(
+            f"'{nombre}' no es un nombre valido (de 1 a 30 letras, digitos, _ o -).")
+    return os.path.join(carpeta, nombre + EXTENSION_PARTIDA)
+
+
+def historial_a_datos(historial):
+    """Objetivo: pasa el historial a un diccionario que se puede guardar en JSON.
+    Parametros:
+      historial (dict): creado con crear_historial.
+    Retorna:
+      dict: copia del historial con las tuplas convertidas en listas."""
+    jugadas = []
+    for jugada in historial["jugadas"]:
+        copia = jugada.copy()
+        copia["objetivo"] = list(jugada["objetivo"])
+        jugadas.append(copia)
+    return {
+        "jugadores": list(historial["jugadores"]),
+        "jugadas": jugadas,
+        "ganador": historial["ganador"],
+    }
+
+
+def datos_a_historial(datos):
+    """Objetivo: reconstruye el historial a partir de lo que devuelve
+    historial_a_datos.
+    Parametros:
+      datos (dict): el historial leido del archivo.
+    Retorna:
+      dict: el historial con jugadores y objetivos como tuplas.
+    Lanza:
+      PartidaCorrupta si falta algun dato."""
+    try:
+        jugadas = []
+        for jugada in datos["jugadas"]:
+            copia = dict(jugada)
+            copia["objetivo"] = tuple(jugada["objetivo"])
+            jugadas.append(copia)
+        historial = {
+            "jugadores": tuple(datos["jugadores"]),
+            "jugadas": jugadas,
+            "ganador": datos["ganador"],
+        }
+    except (KeyError, TypeError) as error:
+        raise PartidaCorrupta(f"El historial guardado esta incompleto: {error}") from error
+    if len(historial["jugadores"]) != CANTIDAD_JUGADORES:
+        raise PartidaCorrupta("El historial guardado no tiene dos jugadores.")
+    return historial
+
+
+def estado_a_datos(estado):
+    """Objetivo: pasa el estado de una partida a datos que se pueden guardar en JSON.
+    El estado original no se modifica.
+    Parametros:
+      estado (dict): el estado de la partida (ver partida.py).
+    Retorna:
+      dict: copia del estado con flotas e historial convertidos."""
+    datos = dict(estado)
+    jugadores = []
+    for jugador in estado["jugadores"]:
+        copia = dict(jugador)
+        copia["flota"] = flota.flota_a_datos(jugador["flota"])
+        jugadores.append(copia)
+    datos["jugadores"] = jugadores
+    datos["historial"] = historial_a_datos(estado["historial"])
+    return datos
+
+
+def datos_a_estado(datos):
+    """Objetivo: reconstruye el estado de una partida a partir de lo que
+    devuelve estado_a_datos.
+    Parametros:
+      datos (dict): el estado leido del archivo.
+    Retorna:
+      dict: el estado listo para seguir jugando.
+    Lanza:
+      PartidaCorrupta si falta algun dato o alguna flota no es valida."""
+    try:
+        estado = dict(datos)
+        jugadores = []
+        for jugador in datos["jugadores"]:
+            copia = dict(jugador)
+            copia["flota"] = flota.datos_a_flota(jugador["flota"])
+            jugadores.append(copia)
+        estado["jugadores"] = jugadores
+        estado["historial"] = datos_a_historial(datos["historial"])
+        if type(datos["n"]) != int or datos["turno"] not in range(CANTIDAD_JUGADORES):
+            raise ValueError("'n' o 'turno' no son validos")
+    except (KeyError, TypeError, ValueError) as error:
+        raise PartidaCorrupta(f"La partida guardada esta incompleta: {error}") from error
+    except flota.ErrorFlota as error:
+        raise PartidaCorrupta(f"La flota guardada no es valida: {error}") from error
+    if len(jugadores) != CANTIDAD_JUGADORES:
+        raise PartidaCorrupta("La partida guardada no tiene dos jugadores.")
+    return estado
+
+
+def escribir_json(ruta, datos):
+    """Objetivo: escribe datos en un archivo JSON, creando la carpeta si hace falta.
+    Primero escribe un archivo temporal y despues lo renombra, asi un error
+    a mitad de camino no deja el archivo anterior roto.
+    Parametros:
+      ruta (str): ruta relativa del archivo.
+      datos: lo que se va a guardar (debe poder pasarse a JSON).
+    Retorna:
+      str: la ruta escrita.
+    Lanza:
+      ErrorArchivo si no se pudo escribir."""
+    temporal = ruta + ".tmp"
+    try:
+        carpeta = os.path.dirname(ruta)
+        if carpeta != "":
+            os.makedirs(carpeta, exist_ok=True)
+        with open(temporal, "w", encoding="utf-8") as archivo:
+            json.dump(datos, archivo, ensure_ascii=False, indent=2)
+        os.replace(temporal, ruta)
+    except (OSError, TypeError, ValueError) as error:
+        raise ErrorArchivo(f"No se pudo escribir {ruta}: {error}") from error
+    else:
+        return ruta
+    finally:
+        if os.path.exists(temporal):
+            os.remove(temporal)
+
+
+def leer_json(ruta):
+    """Objetivo: lee un archivo JSON.
+    Parametros:
+      ruta (str): ruta relativa del archivo.
+    Retorna:
+      los datos leidos.
+    Lanza:
+      FileNotFoundError si el archivo no existe,
+      PartidaCorrupta si el contenido no es JSON valido,
+      ErrorArchivo si no se pudo leer por otro motivo."""
+    try:
+        with open(ruta, "r", encoding="utf-8") as archivo:
+            return json.load(archivo)
+    except FileNotFoundError:
+        raise
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise PartidaCorrupta(f"{ruta} no tiene un JSON valido.") from error
+    except OSError as error:
+        raise ErrorArchivo(f"No se pudo leer {ruta}: {error}") from error
+
+
+def guardar_partida(estado, nombre, carpeta=CARPETA_PARTIDAS):
+    """Objetivo: guarda una partida a medio jugar en un archivo JSON
+    (FUNCION PUBLICA). Si ya existe una partida con ese nombre, la reemplaza.
+    Parametros:
+      estado (dict): el estado de la partida.
+      nombre (str): nombre de la partida (ver PATRON_PARTIDA).
+      carpeta (str): carpeta de las partidas.
+    Retorna:
+      str: la ruta del archivo escrito.
+    Lanza:
+      NombrePartidaInvalido si el nombre no es valido,
+      ErrorArchivo si no se pudo escribir."""
+    ruta = ruta_partida(nombre, carpeta)
+    return escribir_json(ruta, estado_a_datos(estado))
+
+
+def cargar_partida(nombre, carpeta=CARPETA_PARTIDAS):
+    """Objetivo: carga una partida guardada para seguir jugandola
+    (FUNCION PUBLICA).
+    Parametros:
+      nombre (str): nombre de la partida (como lo devuelve listar_partidas).
+      carpeta (str): carpeta de las partidas.
+    Retorna:
+      dict: el estado de la partida en el punto en que se guardo.
+    Lanza:
+      NombrePartidaInvalido si el nombre no es valido,
+      PartidaNoEncontrada si no existe,
+      PartidaCorrupta si el archivo no se puede reconstruir,
+      ErrorArchivo si no se pudo leer."""
+    ruta = ruta_partida(nombre, carpeta)
+    try:
+        datos = leer_json(ruta)
+    except FileNotFoundError as error:
+        raise PartidaNoEncontrada(f"No hay ninguna partida llamada '{nombre}'.") from error
+    if type(datos) != dict:
+        raise PartidaCorrupta(f"{ruta} no contiene una partida.")
+    return datos_a_estado(datos)
+
+
+def listar_partidas(carpeta=CARPETA_PARTIDAS):
+    """Objetivo: lista las partidas guardadas (FUNCION PUBLICA).
+    Parametros:
+      carpeta (str): carpeta de las partidas.
+    Retorna:
+      list: nombres de las partidas (sin extension), en orden alfabetico.
+      Lista vacia si todavia no se guardo ninguna."""
+    if not os.path.isdir(carpeta):
+        return []
+    nombres = []
+    for archivo in os.listdir(carpeta):
+        nombre, extension = os.path.splitext(archivo)
+        if extension == EXTENSION_PARTIDA and es_nombre_partida_valido(nombre):
+            nombres.append(nombre)
+    return sorted(nombres)
+
+
+def borrar_partida(nombre, carpeta=CARPETA_PARTIDAS):
+    """Objetivo: borra una partida guardada (por ejemplo, cuando termina).
+    Parametros:
+      nombre (str): nombre de la partida.
+      carpeta (str): carpeta de las partidas.
+    Retorna:
+      bool: True si se borro; False si no existia.
+    Lanza:
+      NombrePartidaInvalido si el nombre no es valido,
+      ErrorArchivo si no se pudo borrar."""
+    ruta = ruta_partida(nombre, carpeta)
+    try:
+        os.remove(ruta)
+    except FileNotFoundError:
+        return False
+    except OSError as error:
+        raise ErrorArchivo(f"No se pudo borrar {ruta}: {error}") from error
+    return True
+
+
+
+# Entrega 3: exportacion y ranking
+
+def exportar_resumen(historial, nombre, carpeta=CARPETA_EXPORTACIONES):
+    """Objetivo: exporta el resumen de una partida a un archivo de texto.
+    Parametros:
+      historial (dict): el historial de la partida.
+      nombre (str): nombre del archivo, sin extension (ver PATRON_PARTIDA).
+      carpeta (str): carpeta de las exportaciones.
+    Retorna:
+      str: la ruta del archivo escrito.
+    Lanza:
+      NombrePartidaInvalido si el nombre no es valido,
+      ErrorArchivo si no se pudo escribir."""
+    if not es_nombre_partida_valido(nombre):
+        raise NombrePartidaInvalido(f"'{nombre}' no es un nombre valido.")
+    ruta = os.path.join(carpeta, nombre + ".txt")
+    try:
+        os.makedirs(carpeta, exist_ok=True)
+        with open(ruta, "w", encoding="utf-8") as archivo:
+            archivo.write("\n".join(generar_resumen(historial)) + "\n")
+    except OSError as error:
+        raise ErrorArchivo(f"No se pudo escribir {ruta}: {error}") from error
+    return ruta
+
+
+def exportar_historial(historial, nombre, carpeta=CARPETA_EXPORTACIONES):
+    """Objetivo: exporta el historial completo (todas las jugadas) a JSON.
+    Parametros:
+      historial (dict): el historial de la partida.
+      nombre (str): nombre del archivo, sin extension (ver PATRON_PARTIDA).
+      carpeta (str): carpeta de las exportaciones.
+    Retorna:
+      str: la ruta del archivo escrito.
+    Lanza:
+      NombrePartidaInvalido si el nombre no es valido,
+      ErrorArchivo si no se pudo escribir."""
+    if not es_nombre_partida_valido(nombre):
+        raise NombrePartidaInvalido(f"'{nombre}' no es un nombre valido.")
+    ruta = os.path.join(carpeta, nombre + ".json")
+    return escribir_json(ruta, historial_a_datos(historial))
+
+
+def cargar_resultados(archivo=ARCHIVO_RANKING):
+    """Objetivo: lee los resultados de las partidas terminadas.
+    Parametros:
+      archivo (str): ruta del archivo del ranking.
+    Retorna:
+      list: lista de resultados {"jugadores": [...], "ganador": ...};
+      lista vacia si el archivo todavia no existe.
+    Lanza:
+      PartidaCorrupta si el archivo no tiene el formato esperado,
+      ErrorArchivo si no se pudo leer."""
+    try:
+        resultados = leer_json(archivo)
+    except FileNotFoundError:
+        return []
+    if type(resultados) != list:
+        raise PartidaCorrupta(f"{archivo} no tiene una lista de resultados.")
+    return resultados
+
+
+def registrar_resultado(historial, archivo=ARCHIVO_RANKING):
+    """Objetivo: agrega el resultado de una partida terminada al archivo
+    del ranking.
+    Parametros:
+      historial (dict): historial con el ganador ya registrado
+      (ver finalizar_historial).
+      archivo (str): ruta del archivo del ranking.
+    Retorna:
+      dict: el resultado agregado.
+    Lanza:
+      ErrorRegistro si la partida no tiene ganador,
+      PartidaCorrupta o ErrorArchivo si falla el archivo."""
+    if historial["ganador"] is None:
+        raise ErrorRegistro("La partida todavia no tiene ganador.")
+    jugador1, jugador2 = historial["jugadores"]
+    resultado = {
+        "jugadores": [jugador1, jugador2],
+        "ganador": historial["ganador"],
+        "jugadas": len(historial["jugadas"]),
+        "punteria": {
+            jugador1: calcular_estadisticas(historial, jugador1)["punteria"],
+            jugador2: calcular_estadisticas(historial, jugador2)["punteria"],
+        },
+    }
+    resultados = cargar_resultados(archivo)
+    resultados.append(resultado)
+    escribir_json(archivo, resultados)
+    return resultado
+
+
+def calcular_ranking(resultados):
+    """Objetivo: arma el ranking de jugadores a partir de los resultados.
+    Parametros:
+      resultados (list): lo que devuelve cargar_resultados.
+    Retorna:
+      list: un diccionario por jugador con "jugador", "partidas",
+      "victorias", "derrotas" y "porcentaje" (de victorias), ordenado por
+      victorias, despues por porcentaje y despues por nombre."""
+    tabla = {}
+    for resultado in resultados:
+        for jugador in resultado["jugadores"]:
+            fila = tabla.setdefault(jugador, {"jugador": jugador, "partidas": 0,
+                                              "victorias": 0, "derrotas": 0})
+            fila["partidas"] += 1
+            if resultado["ganador"] == jugador:
+                fila["victorias"] += 1
+            else:
+                fila["derrotas"] += 1
+    for fila in tabla.values():
+        fila["porcentaje"] = round(fila["victorias"] * 100 / fila["partidas"], 1)
+    return sorted(tabla.values(),
+                  key=lambda fila: (-fila["victorias"], -fila["porcentaje"], fila["jugador"]))
+
+
+def ranking(archivo=ARCHIVO_RANKING):
+    """Objetivo: devuelve el ranking guardado.
+    Parametros:
+      archivo (str): ruta del archivo del ranking.
+    Retorna:
+      list: ver calcular_ranking.
+    Lanza:
+      PartidaCorrupta o ErrorArchivo si falla el archivo."""
+    return calcular_ranking(cargar_resultados(archivo))
+
+
+def texto_ranking(filas, cantidad=10):
+    """Objetivo: arma las lineas de texto del ranking para mostrar.
+    No imprime nada: el integrador decide como mostrarlo.
+    Parametros:
+      filas (list): lo que devuelve ranking o calcular_ranking.
+      cantidad (int): cuantos puestos mostrar.
+    Retorna:
+      list: lista de cadenas, una por renglon."""
+    lineas = ["===== RANKING =====",
+              f"{'#':>2}  {'Jugador':<20} {'PJ':>3} {'PG':>3} {'PP':>3} {'%':>6}"]
+    if len(filas) == 0:
+        lineas.append("Todavia no hay partidas terminadas.")
+        return lineas
+    for posicion, fila in enumerate(filas[:cantidad]):
+        lineas.append(f"{posicion + 1:>2}. {fila['jugador']:<20} {fila['partidas']:>3} "
+                      f"{fila['victorias']:>3} {fila['derrotas']:>3} {fila['porcentaje']:>5.1f}%")
     return lineas

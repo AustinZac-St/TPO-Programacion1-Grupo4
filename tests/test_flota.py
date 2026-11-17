@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 import flota
@@ -201,3 +203,65 @@ def test_disparo_invalido_lanza_excepcion():
         with pytest.raises(flota.DisparoInvalido):
             flota.recibir_impacto(cubo, naves, punto)
     assert issubclass(flota.DisparoInvalido, flota.ErrorFlota)
+
+
+# Entrega 3: datos para guardar y reponer la partida
+
+def flota_con_disparos():
+    """Arma una flota ubicada con un impacto, un golpe al portaaviones y una
+    nave hundida."""
+    cubo = tablero.crear_cubo(8)
+    naves = flota.ubicacion_automatica(cubo, flota.CATALOGO, 7)
+    fragata = naves[0]
+    for punto in sorted(fragata["celdas"]):
+        flota.recibir_impacto(cubo, naves, punto)
+    portaaviones = [nave for nave in naves if nave["tipo"] == "P"][0]
+    flota.recibir_impacto(cubo, naves, min(portaaviones["celdas"]))
+    return naves
+
+
+def test_flota_a_datos_se_puede_pasar_a_json_y_volver():
+    naves = flota_con_disparos()
+    texto = json.dumps(flota.flota_a_datos(naves))
+    assert flota.datos_a_flota(json.loads(texto)) == naves
+
+
+def test_flota_repuesta_conserva_estados_y_golpes():
+    naves = flota.datos_a_flota(json.loads(json.dumps(flota.flota_a_datos(flota_con_disparos()))))
+    assert flota.esta_hundida(naves[0])
+    portaaviones = [nave for nave in naves if nave["tipo"] == "P"][0]
+    assert portaaviones["golpes"] == {min(portaaviones["celdas"]): 1}
+    assert portaaviones["impactos"] == set()
+
+
+def test_flota_a_datos_no_modifica_la_flota():
+    naves = flota_con_disparos()
+    copia = [dict(nave) for nave in naves]
+    flota.flota_a_datos(naves)
+    assert naves == copia
+
+
+def test_flota_vacia():
+    assert flota.flota_a_datos([]) == []
+    assert flota.datos_a_flota([]) == []
+
+
+@pytest.mark.parametrize("cambio", [
+    lambda nave: nave.pop("celdas"),
+    lambda nave: nave.update(tipo="Z"),
+    lambda nave: nave.update(celdas=nave["celdas"][:1]),
+    lambda nave: nave.update(celdas=[[1, 1]] + nave["celdas"][1:]),
+    lambda nave: nave.update(impactos=[[9, 9, 9]]),
+    lambda nave: nave.update(golpes=[[[9, 9, 9], 1]]),
+    lambda nave: nave.update(golpes="x"),
+])
+def test_datos_a_flota_rechaza_datos_rotos(cambio):
+    datos = flota.flota_a_datos(flota_con_disparos())
+    cambio(datos[0])
+    with pytest.raises(flota.DatosFlotaInvalidos):
+        flota.datos_a_flota(datos)
+
+
+def test_datos_a_flota_rechaza_algo_que_no_es_lista():
+    with pytest.raises(flota.DatosFlotaInvalidos):
+        flota.datos_a_flota({"F1": []})

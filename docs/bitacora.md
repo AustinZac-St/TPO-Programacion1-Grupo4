@@ -22,13 +22,13 @@
 | registro.py  | Bisanzio Geronimo            |
 | partida.py   | Austin Zacarias Stelli       |
 
-## Entrega 3 (DD/MM)
+## Entrega 3 (16/11)
 
 | Módulo       | Integrante(s)                |
 | ------------ | ---------------------------- |
 | tablero.py   | Austin Zacarias Stelli       |
-| flota.py     | COMPLETAR                    |
+| flota.py     | Rafael Lepage                |
 | radar.py     | Juan Ignacio Chedufau Moleon |
 | armamento.py | Juan Ignacio Chedufau Moleon |
-| registro.py  | COMPLETAR                    |
-| partida.py   | COMPLETAR                    |
+| registro.py  | Rafael Lepage                |
+| partida.py   | Bisanzio Geronimo            |
