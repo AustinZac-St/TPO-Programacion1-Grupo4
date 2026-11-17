@@ -71,9 +71,9 @@ REFERENCIAS = ("Referencias:  ~ sin explorar   N nave   o agua   X impacto"
                "   # hundido   ? detectado")
 
 
-# --------------------------------------------------------------------------
+
 # Funciones sin entrada ni salida (se pueden probar con pytest)
-# --------------------------------------------------------------------------
+
 
 def nueva_partida_1v1(configuracion=None):
     """
@@ -304,9 +304,9 @@ def turno_maquina(estado):
     return jugada
 
 
-# --------------------------------------------------------------------------
+
 # Entrada y salidaS
-# --------------------------------------------------------------------------
+
 
 def pedir_dato(mensaje, patron):
     """
