@@ -951,3 +951,225 @@ def texto_ranking(filas, cantidad=10):
         lineas.append(f"{posicion + 1:>2}. {fila['jugador']:<20} {fila['partidas']:>3} "
                       f"{fila['victorias']:>3} {fila['derrotas']:>3} {fila['porcentaje']:>5.1f}%")
     return lineas
+
+
+# Entrega 3: entrada y salida
+
+def guardar_y_salir(estado):
+    """
+    Pide un nombre, guarda la partida y marca el estado para volver al
+    menú principal. Si no se pudo guardar, avisa y se sigue jugando.
+    Recibe: estado (dict de la partida).
+    Devuelve: True si se guardó (termina el menú del turno), False si no.
+    """
+    nombre = pedir_dato("Nombre de la partida (letras, numeros, - y _): ",
+                        PATRON_NOMBRE_PARTIDA)
+    guardada = False
+    try:
+        guardar_estado(estado, nombre)
+    except ERRORES_DE_ARCHIVO as error:
+        print("No se pudo guardar la partida: " + str(error))
+    else:
+        estado["salir"] = True
+        guardada = True
+        print("Partida guardada como '" + nombre + "'.")
+    finally:
+        print("--------------------")
+    return guardada
+
+
+OPCIONES_TURNO_CON_GUARDADO = {
+    "1": disparar,
+    "2": ver_mi_cubo,
+    "3": ver_cubo_rival,
+    "4": guardar_y_salir,
+}
+
+
+def turno_de_jugador_con_guardado(estado):
+    """
+    Igual que turno_de_jugador (Entrega 2), con la opción de guardar la
+    partida y salir.
+    Recibe: estado (dict de la partida).
+    Devuelve: nada. El estado queda con el turno cambiado, o marcado con
+    "salir" si se guardó.
+    """
+    jugador = estado["jugadores"][estado["turno"]]
+    print()
+    print("=== Turno de " + jugador["nombre"] + " ===")
+    mostrar_municion(jugador)
+    jugado = False
+    while not jugado:
+        print("1 - Disparar")
+        print("2 - Ver mi cubo")
+        print("3 - Ver el cubo del rival")
+        print("4 - Guardar y salir")
+        opcion = pedir_dato("Opcion: ", PATRON_OPCION_TURNO_CON_GUARDADO)
+        jugado = OPCIONES_TURNO_CON_GUARDADO[opcion](estado)
+
+
+def turno_de_maquina_con_nivel(estado):
+    """
+    Igual que turno_de_maquina (Entrega 2), pero la máquina juega según
+    su nivel.
+    Recibe: estado (dict de la partida).
+    Devuelve: nada. El estado queda con el turno cambiado.
+    """
+    jugador = estado["jugadores"][estado["turno"]]
+    print()
+    print("=== Turno de " + jugador["nombre"] + " ===")
+    jugada = turno_maquina_con_nivel(estado)
+    nombre_arma = armamento.CATALOGO_ARMAS[jugada["arma"]]["nombre"]
+    print(jugador["nombre"] + " dispara " + nombre_arma + " a " + str(jugada["objetivo"]))
+    mostrar_resultado(estado["ultimo_resumen"])
+
+
+# Qué función juega el turno según si el jugador es una máquina o no.
+TURNOS = {
+    True: turno_de_maquina_con_nivel,
+    False: turno_de_jugador_con_guardado,
+}
+
+
+def jugar_partida_con_guardado(estado):
+    """
+    Igual que jugar_partida (Entrega 2), pero se puede guardar y salir,
+    cada máquina juega según su nivel y al terminar se muestra el
+    resumen de registro.py.
+    Recibe: estado (dict de la partida, con las flotas ya ubicadas).
+    Devuelve: el nombre del ganador (str), o None si se guardó para
+    seguir después.
+    """
+    ganador = hay_ganador(estado)
+    while ganador is None and not estado.get("salir", False):
+        jugador = estado["jugadores"][estado["turno"]]
+        TURNOS[jugador.get("es_maquina", False)](estado)
+        ganador = hay_ganador(estado)
+    if estado.pop("salir", False):
+        print("Volviendo al menu principal.")
+        return None
+    registro.finalizar_historial(estado["historial"], ganador)
+    print()
+    print("Gano " + ganador + ". Hundio toda la flota del rival.")
+    print()
+    for linea in registro.generar_resumen(estado["historial"]):
+        print(linea)
+    return ganador
+
+
+def pedir_nivel(mensaje):
+    """
+    Pide el nivel de una máquina.
+    Recibe: mensaje (str).
+    Devuelve: 1 (azar) o 2 (cazadora), como int.
+    """
+    print("Niveles: 1 = juega al azar   2 = caza las naves que impacta")
+    return int(pedir_dato(mensaje, PATRON_NIVEL))
+
+
+def partida_uno_contra_uno_con_guardado():
+    """
+    Igual que partida_uno_contra_uno (Entrega 1), pero la partida se
+    puede guardar.
+    Devuelve: False, para que el menú principal se vuelva a mostrar.
+    """
+    estado = nueva_partida_1v1()
+    for jugador in estado["jugadores"]:
+        submenu_ubicacion(jugador)
+    print()
+    print("Las dos flotas estan ubicadas. Empieza la partida.")
+    jugar_partida_con_guardado(estado)
+    return False
+
+
+def partida_contra_la_maquina_con_nivel():
+    """
+    Igual que partida_uno_contra_la_maquina (Entrega 2), pero se elige el
+    nivel de la máquina y la partida se puede guardar.
+    Devuelve: False, para que el menú principal se vuelva a mostrar.
+    """
+    estado = nueva_partida_vs_maquina(None, pedir_nivel("Nivel de la maquina: "))
+    submenu_ubicacion(estado["jugadores"][0])
+    ubicacion_automatica(estado["jugadores"][1])
+    print()
+    print("Las dos flotas estan ubicadas. Empieza la partida.")
+    jugar_partida_con_guardado(estado)
+    return False
+
+
+def partida_maquina_contra_maquina():
+    """
+    Crea una partida entre dos máquinas, con el nivel que se elija para
+    cada una, y la juega mostrando cada turno.
+    Devuelve: False, para que el menú principal se vuelva a mostrar.
+    """
+    niveles = (pedir_nivel("Nivel de la Maquina 1: "),
+               pedir_nivel("Nivel de la Maquina 2: "))
+    try:
+        estado = nueva_partida_maquina_vs_maquina(None, niveles)
+    except flota.ErrorFlota as error:
+        print("No se pudo ubicar alguna flota: " + str(error))
+    else:
+        print()
+        print("Las dos flotas se ubicaron solas. Empieza la partida.")
+        jugar_partida_con_guardado(estado)
+    return False
+
+
+def elegir_partida_guardada(nombres):
+    """
+    Muestra las partidas guardadas numeradas y pide una.
+    Recibe: nombres (lista de str, no vacía).
+    Devuelve: el nombre elegido (str), o None si se tipea 0 para volver.
+    """
+    print()
+    print("--- Partidas guardadas ---")
+    for posicion, nombre in enumerate(nombres):
+        print(str(posicion + 1) + " - " + nombre)
+    print("0 - Volver")
+    opcion = int(pedir_dato("Opcion: ", PATRON_NUMERO))
+    while opcion > len(nombres):
+        print("Dato invalido. Intente de nuevo.")
+        opcion = int(pedir_dato("Opcion: ", PATRON_NUMERO))
+    if opcion == 0:
+        return None
+    return nombres[opcion - 1]
+
+
+def continuar_partida_guardada():
+    """
+    Lista las partidas guardadas, carga la elegida y la retoma en el punto
+    exacto en que se dejó.
+    Devuelve: False, para que el menú principal se vuelva a mostrar.
+    """
+    try:
+        nombres = registro.listar_partidas()
+    except ERRORES_DE_ARCHIVO as error:
+        print("No se pudieron leer las partidas guardadas: " + str(error))
+        return False
+    if len(nombres) == 0:
+        print("No hay partidas guardadas.")
+        return False
+
+    nombre = elegir_partida_guardada(nombres)
+    if nombre is None:
+        return False
+    try:
+        estado = cargar_estado(nombre)
+    except ERRORES_DE_ARCHIVO as error:
+        print("No se pudo cargar la partida '" + nombre + "': " + str(error))
+    else:
+        print("Partida '" + nombre + "' cargada. Le toca a "
+              + estado["jugadores"][estado["turno"]]["nombre"] + ".")
+        jugar_partida_con_guardado(estado)
+    return False
+
+
+OPCIONES_PRINCIPAL["1"] = partida_uno_contra_uno_con_guardado
+OPCIONES_PRINCIPAL["2"] = partida_contra_la_maquina_con_nivel
+OPCIONES_PRINCIPAL["3"] = partida_maquina_contra_maquina
+OPCIONES_PRINCIPAL["4"] = continuar_partida_guardada
+
+
+if __name__ == "__main__":
+    main()
